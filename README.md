@@ -27,15 +27,21 @@ npm run dev
 Abra **http://localhost:5173**. O Vite encaminha as chamadas à API local em 8081;
 para outro endereço, configure API_TARGET no terminal do frontend.
 
-Administrador **exclusivamente de desenvolvimento/demo**:
+Não há senha ou administrador padrão. Antes da primeira inicialização local,
+configure seu próprio administrador (CPF válido e e-mail institucional):
 
-- CPF: `90000000175`
-- Senha: `Desenvolvimento123!`
+```bash
+export BOOTSTRAP_ADMIN=true
+read -rp 'CPF do administrador: ' ADMIN_CPF
+read -rp 'Email institucional: ' ADMIN_EMAIL
+read -rsp 'Senha do administrador (mínimo 12 caracteres): ' ADMIN_PASSWORD
+export ADMIN_CPF ADMIN_EMAIL ADMIN_PASSWORD
+```
 
-ADMIN_CPF, ADMIN_EMAIL e ADMIN_PASSWORD substituem esses valores locais. Os
-cadastros e reservas no H2 são apagados ao encerrar. Para testar sem internet,
-troque o perfil `dev` por `demo`: usa três salas fictícias e a mesma porta 8081.
-No dev, a planilha real precisa continuar permitindo exportação CSV por HTTPS.
+Depois execute o backend conforme o comando acima. Em dev/demo, o segredo JWT é
+aleatório por execução, salvo se JWT_SECRET for informado. Os dados H2 são
+apagados ao encerrar. Para testar sem internet, troque dev por demo (três salas
+fictícias). No dev, a planilha precisa permitir exportação CSV por HTTPS.
 
 ## Perfis e autenticação
 
@@ -111,7 +117,7 @@ Git e fora da aplicação. React é a interface principal. Não há dependência
 repositório remoto da turma em tempo de execução. Não foi feito push ou deploy.
 
 Para repetir o teste de navegador, use uma instância demo recém-iniciada na porta
-18084 (banco vazio, credenciais locais padrão) e Chrome instalado:
+18084 (banco vazio, credenciais informadas nas variáveis de ambiente) e Chrome instalado:
 
 ```bash
 java -jar target/ifsystem-0.0.1-SNAPSHOT.jar --spring.profiles.active=demo --server.port=18084
@@ -127,7 +133,6 @@ a URL de teste. Capturas ficam no diretório temporário do sistema.
 ## Supabase, Vercel e hospedagem da API
 
 Consulte [o guia de hospedagem](docs/hosting.md) para Supabase PostgreSQL com
-schema privado, Vercel e Render/Railway. O CPF de demonstração atual é
-`90000000175`. Alunos devem usar `@alunos.ifsuldeminas.edu.br`; os demais perfis,
+schema privado, Vercel e Render/Railway. Não há credenciais fixas de demonstração. Alunos devem usar `@alunos.ifsuldeminas.edu.br`; os demais perfis,
 `@ifsuldeminas.edu.br`. A validação verifica formato, domínio e verificadores do
 CPF; não confirma identidade na Receita nem existência da caixa de e-mail.

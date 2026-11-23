@@ -1,0 +1,22 @@
+{
+  "name": "ifsistem-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "format": "prettier --write src vite.config.js e2e",
+    "test:e2e": "node e2e/smoke.cjs"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.1",
+    "prettier": "^3.10.1",
+    "vite": "^6.4.1"
+  }
+}

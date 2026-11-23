@@ -1,0 +1,32 @@
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ifsistem
+      POSTGRES_USER: ifsistem
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Configure DB_PASSWORD no arquivo .env}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ifsistem -d ifsistem"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      DB_URL: jdbc:postgresql://database:5432/ifsistem
+      DB_USERNAME: ifsistem
+      DB_PASSWORD: ${DB_PASSWORD:?Configure DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Configure JWT_SECRET com pelo menos 32 bytes}
+      BOOTSTRAP_ADMIN: "true"
+      ADMIN_CPF: ${ADMIN_CPF:?Configure ADMIN_CPF}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Configure ADMIN_EMAIL institucional}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Configure ADMIN_PASSWORD com pelo menos 12 caracteres}
+    depends_on:
+      database:
+        condition: service_healthy
+volumes:
+  database:
