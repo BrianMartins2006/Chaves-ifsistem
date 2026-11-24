@@ -1296,3 +1296,16 @@ label {
     align-self: flex-start;
   }
 }
+
+.auth-card > .portal-link {
+  margin: 0 0 24px;
+  width: fit-content;
+  color: var(--brand-action);
+  border-color: var(--border);
+  background: var(--surface);
+}
+.auth-card > .portal-link:hover {
+  color: var(--brand-forest);
+  background: var(--brand-mint);
+  border-color: var(--brand-action);
+}

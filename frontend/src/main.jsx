@@ -374,6 +374,7 @@ function App() {
         </section>
         <section className="auth-panel">
           <div className="auth-card">
+            <PortalLink />
             <span className="eyebrow">BEM-VINDO AO IFCONECT</span>
             <h2>{signup ? "Crie sua conta" : "Acesse sua conta"}</h2>
             <p>
