@@ -30,6 +30,7 @@ public class SpreadsheetRoomProvider implements RoomDataProvider {
                     .followRedirects(HttpClient.Redirect.NORMAL)
                     .build();
     private List<Room> cached;
+    private List<ifsuldeminas.edu.br.ifsystem.room.domain.WeeklyClass> cachedClasses = List.of();
     private Instant expiresAt = Instant.MIN;
 
     public SpreadsheetRoomProvider(
@@ -63,6 +64,10 @@ public class SpreadsheetRoomProvider implements RoomDataProvider {
             if (!parser.getHeaderMap().containsKey(nameColumn)
                     || (!idColumn.isBlank() && !parser.getHeaderMap().containsKey(idColumn)))
                 throw new IOException("Missing room columns");
+            var scheduleHeaders = List.of("Dia da semana", "Início", "Fim");
+            long present = scheduleHeaders.stream().filter(parser.getHeaderMap()::containsKey).count();
+            if (present != 0 && present != 3) throw new IOException("Incomplete timetable columns");
+            Set<ifsuldeminas.edu.br.ifsystem.room.domain.WeeklyClass> classes = new LinkedHashSet<>();
             Map<String, Room> rooms = new TreeMap<>();
             for (var row : parser) {
                 if (!row.isConsistent()) throw new IOException("Invalid CSV row");
@@ -72,6 +77,26 @@ public class SpreadsheetRoomProvider implements RoomDataProvider {
                 String id = idColumn.isBlank() ? stableId(name) : row.get(idColumn).strip();
                 if (id.isBlank() || id.length() > 255 || name.length() > 255)
                     throw new IOException("Invalid room identifier or name");
+                if (present == 3) {
+                    LocalTime start = LocalTime.parse(row.get("Início"));
+                    LocalTime end = LocalTime.parse(row.get("Fim"));
+                    if (!start.isBefore(end)) throw new IOException("Invalid class interval");
+                    String day = Normalizer.normalize(row.get("Dia da semana"), Normalizer.Form.NFD)
+                            .replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
+                    DayOfWeek weekday = switch(day) {
+                        case "segunda-feira", "segunda" -> DayOfWeek.MONDAY;
+                        case "terca-feira", "terca" -> DayOfWeek.TUESDAY;
+                        case "quarta-feira", "quarta" -> DayOfWeek.WEDNESDAY;
+                        case "quinta-feira", "quinta" -> DayOfWeek.THURSDAY;
+                        case "sexta-feira", "sexta" -> DayOfWeek.FRIDAY;
+                        case "sabado" -> DayOfWeek.SATURDAY;
+                        case "domingo" -> DayOfWeek.SUNDAY;
+                        default -> throw new IOException("Invalid class weekday");
+                    };
+                    classes.add(new ifsuldeminas.edu.br.ifsystem.room.domain.WeeklyClass(id, weekday, start, end,
+                        parser.getHeaderMap().containsKey("Turma") ? row.get("Turma") : "",
+                        parser.getHeaderMap().containsKey("Disciplina e docente (texto)") ? row.get("Disciplina e docente (texto)") : ""));
+                }
                 Room room = new Room(id, name, null, null, null, null);
                 Room previous = rooms.putIfAbsent(id, room);
                 // Repeated timetable rows are expected; different names sharing an ID are not.
@@ -79,15 +104,22 @@ public class SpreadsheetRoomProvider implements RoomDataProvider {
                     throw new IOException("Duplicate room identifier");
             }
             if (rooms.isEmpty()) throw new IOException("No rooms in spreadsheet");
+            cachedClasses = List.copyOf(classes);
             cached = List.copyOf(rooms.values());
             expiresAt = Instant.now().plus(cacheTtl);
             return cached;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw unavailable(e);
-        } catch (IOException | UncheckedIOException | IllegalArgumentException e) {
+        } catch (IOException | UncheckedIOException | IllegalArgumentException | DateTimeException e) {
             throw unavailable(e);
         }
+    }
+
+    @Override
+    public synchronized List<ifsuldeminas.edu.br.ifsystem.room.domain.WeeklyClass> findWeeklyClasses() {
+        findAll();
+        return cachedClasses;
     }
 
     private byte[] readSource() throws IOException, InterruptedException {

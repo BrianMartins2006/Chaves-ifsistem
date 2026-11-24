@@ -199,14 +199,15 @@ class ModulePostgresTest {
         LocalDate date = LocalDate.of(2026, 11, 13);
         ZoneId zone = ZoneId.of("America/Sao_Paulo");
         Instant midnight = date.atStartOfDay(zone).toInstant();
-        UUID id = create(student, midnight.minusSeconds(3600), midnight.plusSeconds(3600));
-        create(student, midnight.plusSeconds(7200), midnight.plusSeconds(10800));
+        var legacy = new ifsuldeminas.edu.br.ifsystem.reservation.domain.Reservation("sala-114", student, midnight, midnight.plusSeconds(8 * 3600));
+        legacy.review(ReservationStatus.APPROVED, operator, null);
+        reservations.saveAndFlush(legacy);
+        create(student, midnight.plusSeconds(9 * 3600), midnight.plusSeconds(10 * 3600));
         login(operator);
-        service.approve(id);
         var availability = rooms.availability("sala-114", date);
         assertEquals(1, availability.occupied().size());
-        assertEquals(midnight, availability.occupied().getFirst().startTime());
-        assertEquals(midnight.plusSeconds(3600), availability.available().getFirst().startTime());
+        assertEquals(midnight.plusSeconds(7 * 3600), availability.occupied().getFirst().startTime());
+        assertEquals(midnight.plusSeconds(8 * 3600), availability.available().getFirst().startTime());
     }
 
     @Test
@@ -268,9 +269,10 @@ class ModulePostgresTest {
         login(operator);
         service.approve(future);
         expectStatus(409, () -> keys.checkout(new Checkout(future)));
-        UUID past = create(student, start.minusSeconds(7200), start.minusSeconds(3600));
+        var pastReservation = new ifsuldeminas.edu.br.ifsystem.reservation.domain.Reservation("sala-114", student, start.minusSeconds(7200), start.minusSeconds(3600));
+        pastReservation.review(ReservationStatus.APPROVED, operator, null);
+        UUID past = reservations.saveAndFlush(pastReservation).getId();
         login(operator);
-        service.approve(past);
         expectStatus(409, () -> keys.checkout(new Checkout(past)));
         expectStatus(404, () -> keys.checkout(new Checkout(UUID.randomUUID())));
     }

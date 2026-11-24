@@ -1,4 +1,4 @@
-# Chaves-ifsistem · Gestão de espaços
+# IFConect · Gestão de espaços
 
 Aplicação independente neste repositório: backend Java 21 / Spring Boot / Spring
 Data JPA e frontend React. Gestão de salas, disponibilidade, reservas, aprovação,
@@ -107,9 +107,10 @@ npm --prefix frontend run build
 A suíte Java usa PostgreSQL isolado (sem Docker), H2 e testes REST de autenticação,
 autorização, concorrência e negócio. Não acessa a planilha real nos testes.
 
-**Disponibilidade considera reservas aprovadas. Aulas semanais da planilha ainda
-não bloqueiam datas automaticamente:** falta definir calendário letivo e exceções.
-A interface informa essa limitação. Os IDs de sala dependem dos nomes quando não
+A disponibilidade considera reservas aprovadas e aulas da planilha, respeitando
+o calendário acadêmico configurado. A grade atual é de 2026/2; atualize a fonte
+e o calendário na troca do ano/período. Consulte [atualização da grade](docs/academic-calendar.md).
+ Os IDs de sala dependem dos nomes quando não
 há coluna externa imutável. Consulte [contratos da API](docs/backend.md).
 
 O antigo painel HTML de teste foi preservado em `local-testing/`, ignorado pelo

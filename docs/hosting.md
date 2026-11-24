@@ -90,3 +90,45 @@ automaticamente; revise-os antes de migrar para produção.
 
 Não há credenciais fixas para desenvolvimento. Configure ADMIN_CPF, ADMIN_EMAIL,
 ADMIN_PASSWORD e BOOTSTRAP_ADMIN=true para provisionar seu administrador local.
+
+## Ping do backend com cron-job.org
+
+O endpoint público `GET /health` retorna HTTP 200 e `{"status":"UP"}` sem
+consultar o banco ou a planilha. É uma verificação de resposta da aplicação,
+não uma garantia de que todas as dependências estão disponíveis.
+
+No painel do cron-job.org, crie um cronjob com:
+
+| Campo | Valor |
+| --- | --- |
+| Título | IFConect · Saúde do backend |
+| URL | https://chaves-ifsistem.onrender.com/health |
+| Método | GET |
+| Agendamento | A cada 10 minutos (`*/10 * * * *`) |
+| Fuso | America/Sao_Paulo |
+| Autenticação/corpo | Nenhum |
+
+Ative o job e use a execução de teste para conferir HTTP 200. Não inclua senha,
+JWT ou credenciais do Supabase. Se desejar, habilite notificações de falha e
+recuperação no próprio painel. Não foi criado um agendamento externo
+automaticamente: essa configuração é feita na conta do responsável.
+
+A Render suspende serviços gratuitos após 15 minutos sem tráfego. Os pings
+periódicos ajudam a manter tráfego, mas não garantem disponibilidade e consomem
+as horas gratuitas compartilhadas pelo workspace (750/mês). O cron-job.org tem
+timeout padrão de 30 segundos; uma inicialização a frio da Render pode demorar
+cerca de um minuto e causar falha no primeiro ping. Confira as execuções
+seguintes e os logs antes de interpretar isso como erro do backend.
+
+Fontes: [Render Free](https://render.com/docs/free),
+[FAQ cron-job.org](https://cron-job.org/en/faq/).
+
+
+## Retorno ao portal integrado
+
+O menu do IFConect oferece **Voltar ao portal**, acessível também no celular,
+para `https://ifsistem-portal.onrender.com/`. A navegação ocorre na mesma aba.
+A URL pode ser alterada por `VITE_PORTAL_URL` no frontend; é necessário novo
+build/deploy após mudar a variável. O valor padrão já aponta para o portal.
+Esse acesso é um link de navegação: não transmite JWT nem implementa login
+compartilhado entre os sistemas. A sessão do portal segue suas próprias regras.

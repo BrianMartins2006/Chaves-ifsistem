@@ -39,7 +39,7 @@ public class SecurityConfig {
                                         (request, response, exception) -> response.sendError(401)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/auth/login", "/auth/register").permitAll()
-                        .requestMatchers("/", "/index.html", "/assets/**", "/favicon.svg", "/error", "/health").permitAll()
+                        .requestMatchers("/", "/index.html", "/assets/**", "/horarios/**", "/favicon.svg", "/error", "/health").permitAll()
                         .requestMatchers("/administrador/**").hasRole("ADMINISTRADOR")
                         .requestMatchers("/servidor/**").hasAnyRole("ADMINISTRADOR", "SERVIDOR")
                         .anyRequest().authenticated())

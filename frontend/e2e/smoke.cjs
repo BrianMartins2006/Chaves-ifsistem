@@ -28,7 +28,9 @@ const assert = require("node:assert/strict");
       "E-mail institucional": "aluno-react@alunos.ifsuldeminas.edu.br",
       Matrícula: "aluno-react",
       CPF: "90000000760",
+      "Confirmar CPF": "90000000760",
       Senha: studentPassword,
+      "Confirmar senha": studentPassword,
       Curso: "Computação",
       Período: "2",
     }))
@@ -46,14 +48,11 @@ const assert = require("node:assert/strict");
       await page.getByRole("button", { name: "Pessoas", exact: true }).count(),
       0,
     );
-    await page
-      .getByRole("button", { name: "Consultar disponibilidade" })
-      .click();
-    await page.getByText(/Fuso: America/).waitFor();
+    await page.locator(".room-agenda").waitFor();
     await page
       .getByRole("button", { name: "Solicitar reserva", exact: true })
       .click();
-    await page.getByText("Solicitação enviada para avaliação.").waitFor();
+    await page.getByText("Solicitação enviada com sucesso!").waitFor();
     await page.getByRole("button", { name: "Reservas", exact: true }).click();
     await page
       .getByRole("table")

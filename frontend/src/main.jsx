@@ -1,6 +1,12 @@
-import React, { useEffect, useState, useRef } from "react";
+import PortalLink from "./PortalLink.jsx";
+import Brand from "./Brand.jsx";
+import React, { useEffect, useState, useRef, useId } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import RoomAgenda from "./RoomAgenda.jsx";
+import { normalizeSearch, shiftDate, checkoutState } from "./schedule.js";
+const InstituteTimetable = React.lazy(() => import("./InstituteTimetable.jsx"));
+import { formatCpf, validateRegistration } from "./identity.js";
 
 const labels = {
   PENDING: "Pendente",
@@ -10,6 +16,9 @@ const labels = {
   CHECKED_OUT: "Retirada",
   RETURNED: "Devolvida",
   AVAILABLE: "Disponível",
+  CLASS: "Em aula",
+  RESERVATION: "Reservada",
+  MIXED: "Ocupada",
   ADMINISTRADOR: "Administrador",
   SERVIDOR: "Servidor",
   PROFESSOR: "Professor",
@@ -64,15 +73,52 @@ function Badge({ value }) {
   return <span className={`badge ${value}`}>{labels[value] || value}</span>;
 }
 function Field({ label, ...props }) {
+  const id = useId();
+  const [visible, setVisible] = useState(false);
+  const password = props.type === "password";
+  const cpf = props.name === "cpf" || props.name === "cpfConfirmation";
   return (
-    <label>
-      {label}
-      <input {...props} />
-    </label>
+    <div className="field">
+      <label htmlFor={props.id || id}>{label}</label>
+      <span className={password ? "password-control" : "input-control"}>
+        <input
+          id={id}
+          {...props}
+          type={password && visible ? "text" : props.type}
+          {...(cpf
+            ? {
+                inputMode: "numeric",
+                maxLength: 14,
+                placeholder: "000.000.000-00",
+                onInput: (e) => {
+                  e.currentTarget.value = formatCpf(e.currentTarget.value);
+                },
+              }
+            : {})}
+        />
+        {password && (
+          <button
+            type="button"
+            className="password-toggle"
+            aria-label={`${visible ? "Ocultar" : "Mostrar"} ${label.toLowerCase()}`}
+            aria-pressed={visible}
+            onClick={() => setVisible(!visible)}
+          >
+            {visible ? "Ocultar" : "Mostrar"}
+          </button>
+        )}
+      </span>
+    </div>
   );
 }
+
 function App() {
   const sessionEpoch = useRef(0);
+  const reservationLock = useRef(false),
+    reservationNotice = useRef(null);
+  const [reservationSending, setReservationSending] = useState(false);
+  const [sentReservations, setSentReservations] = useState({});
+  const [reservationError, setReservationError] = useState(null);
   const [token, setToken] = useState(null),
     [user, setUser] = useState(null),
     [tab, setTab] = useState("rooms");
@@ -84,6 +130,10 @@ function App() {
     [keys, setKeys] = useState([]),
     [history, setHistory] = useState({ content: [], totalPages: 0 }),
     [users, setUsers] = useState([]);
+  const [roomSearch, setRoomSearch] = useState("");
+  const [agendaError, setAgendaError] = useState("");
+  const [agendaLoading, setAgendaLoading] = useState(false),
+    [agendaReload, setAgendaReload] = useState(0);
   const [selected, setSelected] = useState(""),
     [date, setDate] = useState(inputTime(new Date()).slice(0, 10)),
     [availability, setAvailability] = useState(null);
@@ -92,12 +142,53 @@ function App() {
     [status, setStatus] = useState("");
   const [start, setStart] = useState(inputTime(new Date(Date.now() - 60000))),
     [end, setEnd] = useState(inputTime(new Date(Date.now() + 3600000)));
+  const reservationKey = JSON.stringify([selected, start, end]);
+  const sentReservation = sentReservations[reservationKey];
+  useEffect(() => {
+    if (sentReservation || reservationError?.key === reservationKey) {
+      reservationNotice.current?.focus({ preventScroll: true });
+      reservationNotice.current?.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [sentReservation, reservationError, reservationKey]);
+  async function requestReservation(e) {
+    e.preventDefault();
+    if (reservationLock.current || sentReservation) return;
+    reservationLock.current = true;
+    const epoch = sessionEpoch.current,
+      key = reservationKey;
+    setReservationSending(true);
+    setReservationError(null);
+    try {
+      const startTime = instant(start),
+        endTime = instant(end);
+      if (startTime >= endTime)
+        throw Error("O início deve ser anterior ao fim.");
+      const result = await api("/api/reservations", "POST", {
+        roomId: selected,
+        startTime,
+        endTime,
+      });
+      if (epoch === sessionEpoch.current)
+        setSentReservations((previous) => ({ ...previous, [key]: result }));
+    } catch (error) {
+      if (epoch === sessionEpoch.current)
+        setReservationError({ key, text: error.message });
+    } finally {
+      reservationLock.current = false;
+      setReservationSending(false);
+    }
+  }
   const [review, setReview] = useState(null),
     [reason, setReason] = useState("");
   const operator = ["ADMINISTRADOR", "SERVIDOR"].includes(user?.perfil),
     admin = user?.perfil === "ADMINISTRADOR";
   function logout() {
     sessionEpoch.current++;
+    setSentReservations({});
+    setReservationError(null);
     setToken(null);
     setUser(null);
     setRooms([]);
@@ -107,6 +198,7 @@ function App() {
     setReservations({ content: [] });
     setAvailability(null);
     setSelected("");
+    setRoomSearch("");
     setTab("rooms");
     setPage(0);
     setHistoryPage(0);
@@ -186,6 +278,45 @@ function App() {
         setUsers(admin ? await api("/administrador/usuarios") : []);
     });
   }, [token, tab, page, status, historyPage]);
+  useEffect(() => {
+    if (!token || tab !== "rooms" || !selected || !date) {
+      setAvailability(null);
+      setAgendaLoading(false);
+      setAgendaError("");
+      return;
+    }
+    let active = true;
+    setAgendaLoading(true);
+    setAgendaError("");
+    setAvailability(null);
+    setMessage(null);
+    api(`/api/rooms/${encodeURIComponent(selected)}/availability?date=${date}`)
+      .then((data) => {
+        if (active) setAvailability(data);
+      })
+      .catch((error) => {
+        if (active) setAgendaError(error.message);
+      })
+      .finally(() => {
+        if (active) setAgendaLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token, tab, selected, date, agendaReload]);
+  function selectRoom(id) {
+    setSelected(id);
+    setAgendaReload((value) => value + 1);
+    if (window.matchMedia("(max-width:700px)").matches)
+      requestAnimationFrame(() =>
+        document
+          .getElementById("room-agenda")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+  }
+  const filteredRooms = rooms.filter((room) =>
+    normalizeSearch(room.name).includes(normalizeSearch(roomSearch)),
+  );
   const roomName = (id) => rooms.find((r) => r.id === id)?.name || id;
   const person = (id) =>
     users.find((u) => u.id === id)?.nome ||
@@ -196,8 +327,9 @@ function App() {
       data = Object.fromEntries(new FormData(form));
     await task(async () => {
       if (signup) {
-        data.periodo = Number(data.periodo);
-        await api("/auth/register", "POST", data, null);
+        const request = validateRegistration(data);
+        request.periodo = Number(request.periodo);
+        await api("/auth/register", "POST", request, null);
         setSignup(false);
         setMessage({ text: "Conta criada. Entre com seu CPF e senha." });
         form.reset();
@@ -220,9 +352,7 @@ function App() {
     return (
       <main className="auth-layout">
         <section className="auth-story">
-          <a className="brand" href="#">
-            ▦ <span>IFSistem</span>
-          </a>
+          <Brand />
           <div>
             <span className="eyebrow">CAMPUS ORGANIZADO</span>
             <h1>
@@ -244,7 +374,7 @@ function App() {
         </section>
         <section className="auth-panel">
           <div className="auth-card">
-            <span className="eyebrow">BEM-VINDO AO IFSISTEM</span>
+            <span className="eyebrow">BEM-VINDO AO IFCONECT</span>
             <h2>{signup ? "Crie sua conta" : "Acesse sua conta"}</h2>
             <p>
               {signup
@@ -287,6 +417,9 @@ function App() {
                 autoComplete="username"
                 inputMode="numeric"
               />
+              {signup && (
+                <Field label="Confirmar CPF" name="cpfConfirmation" required />
+              )}
               <Field
                 label="Senha"
                 name="senha"
@@ -295,6 +428,16 @@ function App() {
                 required
                 autoComplete={signup ? "new-password" : "current-password"}
               />
+              {signup && (
+                <Field
+                  label="Confirmar senha"
+                  name="passwordConfirmation"
+                  type="password"
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              )}
               {signup && (
                 <div className="form-grid">
                   <Field label="Curso" name="curso" required />
@@ -329,13 +472,13 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#">
-          ▦ <span>IFSistem</span>
-        </a>
+        <Brand />
+        <PortalLink />
         <p className="nav-caption">MEU CAMPUS</p>
         <nav>
           {[
             ["rooms", "Salas e disponibilidade", "▦"],
+            ["timetable", "Horários de aulas", "◷"],
             ["reservations", "Reservas", "▤"],
             ...(operator
               ? [
@@ -375,6 +518,7 @@ function App() {
               {
                 {
                   rooms: "Salas",
+                  timetable: "Horários de aulas",
                   reservations: "Reservas",
                   keys: "Chaves",
                   users: "Pessoas",
@@ -394,6 +538,7 @@ function App() {
                 {
                   {
                     rooms: "Encontre seu espaço",
+                    timetable: "A grade do instituto, na sua mão",
                     reservations: "Suas reservas, organizadas",
                     keys: "Cada chave em seu lugar",
                     users: "Pessoas do campus",
@@ -405,6 +550,8 @@ function App() {
                   {
                     rooms:
                       "Consulte salas e organize seu horário com tranquilidade.",
+                    timetable:
+                      "Consulte as turmas, disciplinas e horários do campus.",
                     reservations: operator
                       ? "Avalie solicitações e acompanhe os horários aprovados."
                       : "Acompanhe suas solicitações e decisões.",
@@ -454,8 +601,21 @@ function App() {
                   <p className="muted">
                     Selecione uma sala para consultar ou reservar.
                   </p>
+                  <Field
+                    label="Buscar sala"
+                    type="search"
+                    placeholder="Ex.: Sala 114, laboratório…"
+                    value={roomSearch}
+                    onChange={(event) => setRoomSearch(event.target.value)}
+                  />
+                  <p className="room-count" role="status">
+                    {filteredRooms.length} salas encontradas
+                  </p>
+                  {rooms.length > 0 && filteredRooms.length === 0 && (
+                    <p className="empty">Nenhuma sala corresponde à busca.</p>
+                  )}
                   <div className="key-grid room-grid">
-                    {rooms.map((r) => (
+                    {filteredRooms.map((r) => (
                       <button
                         className={
                           "key-card room-card " +
@@ -463,10 +623,7 @@ function App() {
                         }
                         key={r.id}
                         aria-pressed={selected === r.id}
-                        onClick={() => {
-                          setSelected(r.id);
-                          setAvailability(null);
-                        }}
+                        onClick={() => selectRoom(r.id)}
                       >
                         <span className="room-icon" aria-hidden="true">
                           ▦
@@ -498,87 +655,91 @@ function App() {
                     </p>
                   )}
                 </section>
-                <section className="card">
+                <section
+                  className="card"
+                  id="room-agenda"
+                  aria-label="Agenda da sala selecionada"
+                >
                   <span className="eyebrow">PLANEJE SEU HORÁRIO</span>
                   <h2>
                     {selected ? roomName(selected) : "Selecione uma sala"}
                   </h2>
+                  {!selected && (
+                    <p className="muted">
+                      Clique em uma sala para ver automaticamente todos os
+                      intervalos livres e ocupados.
+                    </p>
+                  )}
                   <form
+                    className="agenda-controls"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      task(async () =>
-                        setAvailability(
-                          await api(
-                            `/api/rooms/${encodeURIComponent(selected)}/availability?date=${date}`,
-                          ),
-                        ),
-                      );
+                      setAgendaReload((value) => value + 1);
                     }}
                   >
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={!selected || agendaLoading}
+                      onClick={() => setDate(shiftDate(date, -1))}
+                    >
+                      Dia anterior
+                    </button>
                     <Field
                       label="Dia da consulta"
                       type="date"
                       value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      onChange={(event) => setDate(event.target.value)}
                       required
                     />
-                    <button className="secondary" disabled={!selected || busy}>
-                      Consultar disponibilidade
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={!selected || agendaLoading}
+                      onClick={() => setDate(shiftDate(date, 1))}
+                    >
+                      Próximo dia
+                    </button>
+                    <button
+                      type="submit"
+                      className="secondary"
+                      disabled={!selected || agendaLoading}
+                    >
+                      Atualizar agenda
                     </button>
                   </form>
-                  {availability && (
-                    <div className="slots">
-                      <p className="muted">
-                        Fuso: {availability.zone}. Considera reservas aprovadas;
-                        aulas da planilha ainda não bloqueiam horários.
-                      </p>
-                      {availability.available.length === 0 && (
-                        <p>Sem intervalo livre neste dia.</p>
-                      )}
-                      {[
-                        ...availability.occupied.map((s) => ({
-                          ...s,
-                          busy: true,
-                        })),
-                        ...availability.available.map((s) => ({
-                          ...s,
-                          busy: false,
-                        })),
-                      ]
-                        .sort((a, b) => a.startTime.localeCompare(b.startTime))
-                        .map((s, i) => (
-                          <div className="slot" key={i}>
-                            <Badge value={s.busy ? "APPROVED" : "AVAILABLE"} />
-                            <span>
-                              {fmt(s.startTime, availability.zone)} até{" "}
-                              {fmt(s.endTime, availability.zone)}
-                            </span>
-                          </div>
-                        ))}
+                  {agendaError && (
+                    <div className="notice error" role="alert">
+                      {agendaError}
                     </div>
+                  )}
+                  {agendaLoading && (
+                    <p role="status" className="loading">
+                      Carregando todos os horários da sala…
+                    </p>
+                  )}
+                  {availability && (
+                    <RoomAgenda
+                      availability={availability}
+                      onChooseSlot={(slot) => {
+                        setStart(inputTime(new Date(slot.startTime)));
+                        setEnd(inputTime(new Date(slot.endTime)));
+                        document.getElementById("reservation-start")?.focus();
+                      }}
+                    />
                   )}
                   <hr />
                   <h3>Solicitar reserva</h3>
+                  <p className="muted">
+                    Reservas das 07h às 23h, no horário de São Paulo.
+                  </p>
                   <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      task(async () => {
-                        if (instant(start) >= instant(end))
-                          throw Error("O início deve ser anterior ao fim.");
-                        await mutate(
-                          "/api/reservations",
-                          {
-                            roomId: selected,
-                            startTime: instant(start),
-                            endTime: instant(end),
-                          },
-                          "Solicitação enviada para avaliação.",
-                        );
-                      });
-                    }}
+                    onSubmit={requestReservation}
+                    aria-busy={reservationSending}
                   >
                     <Field
                       label="Início · horário de São Paulo"
+                      id="reservation-start"
                       type="datetime-local"
                       required
                       value={start}
@@ -591,13 +752,90 @@ function App() {
                       value={end}
                       onChange={(e) => setEnd(e.target.value)}
                     />
-                    <button disabled={!selected || busy}>
-                      Solicitar reserva
+                    <button
+                      disabled={
+                        !selected ||
+                        busy ||
+                        reservationSending ||
+                        !!sentReservation
+                      }
+                    >
+                      {reservationSending
+                        ? "Enviando solicitação…"
+                        : sentReservation
+                          ? "Solicitação enviada"
+                          : "Solicitar reserva"}
                     </button>
+                    {sentReservation && (
+                      <div
+                        className="reservation-feedback"
+                        role="status"
+                        tabIndex={-1}
+                        ref={reservationNotice}
+                      >
+                        <span
+                          className="reservation-feedback-icon"
+                          aria-hidden="true"
+                        >
+                          ✓
+                        </span>
+                        <div>
+                          <strong>Solicitação enviada com sucesso!</strong>
+                          <p>
+                            {roomName(sentReservation.roomId)} ·{" "}
+                            {fmt(sentReservation.startTime)} até{" "}
+                            {fmt(sentReservation.endTime)}.
+                          </p>
+                          <p>
+                            Sua solicitação está pendente de avaliação. Você não
+                            precisa enviar novamente.
+                          </p>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => {
+                              setPage(0);
+                              setStatus("");
+                              setTab("reservations");
+                            }}
+                          >
+                            Ver minhas reservas
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {reservationError?.key === reservationKey && (
+                      <div
+                        className="reservation-feedback reservation-feedback-error"
+                        role="alert"
+                        tabIndex={-1}
+                        ref={reservationNotice}
+                      >
+                        <span
+                          className="reservation-feedback-icon"
+                          aria-hidden="true"
+                        >
+                          !
+                        </span>
+                        <div>
+                          <strong>Não foi possível enviar a solicitação</strong>
+                          <p>{reservationError.text}</p>
+                        </div>
+                      </div>
+                    )}
                   </form>
                 </section>
               </div>
             </>
+          )}
+          {tab === "timetable" && (
+            <React.Suspense
+              fallback={
+                <p role="status">Carregando os horários do instituto…</p>
+              }
+            >
+              <InstituteTimetable />
+            </React.Suspense>
           )}
           {tab === "reservations" && (
             <section className="card">
@@ -622,7 +860,7 @@ function App() {
                 </select>
               </div>
               <div className="table-scroll">
-                <table>
+                <table className="responsive-table">
                   <thead>
                     <tr>
                       <th>Sala</th>
@@ -634,21 +872,21 @@ function App() {
                   <tbody>
                     {reservations.content.map((r) => (
                       <tr key={r.id}>
-                        <td>
+                        <td data-label="Sala">
                           <strong>{roomName(r.roomId)}</strong>
                           {r.rejectionReason && (
                             <small>{r.rejectionReason}</small>
                           )}
                         </td>
-                        <td>
+                        <td data-label="Período">
                           {fmt(r.startTime)}
                           <br />
                           {fmt(r.endTime)}
                         </td>
-                        <td>
+                        <td data-label="Situação">
                           <Badge value={r.status} />
                         </td>
-                        <td>
+                        <td data-label="Ações">
                           <div className="actions">
                             {operator && r.status === "PENDING" && (
                               <>
@@ -738,6 +976,7 @@ function App() {
                   vinculada ao solicitante.
                 </p>
                 <Checkout
+                  keys={keys}
                   api={api}
                   task={task}
                   busy={busy}
@@ -751,7 +990,7 @@ function App() {
               <section className="card">
                 <h2>Histórico de movimentações</h2>
                 <div className="table-scroll">
-                  <table>
+                  <table className="responsive-table">
                     <thead>
                       <tr>
                         <th>Sala</th>
@@ -764,13 +1003,13 @@ function App() {
                     <tbody>
                       {history.content.map((m) => (
                         <tr key={m.id}>
-                          <td>{roomName(m.roomId)}</td>
-                          <td>{fmt(m.checkoutAt)}</td>
-                          <td>{fmt(m.checkinAt)}</td>
-                          <td>
+                          <td data-label="Sala">{roomName(m.roomId)}</td>
+                          <td data-label="Retirada">{fmt(m.checkoutAt)}</td>
+                          <td data-label="Devolução">{fmt(m.checkinAt)}</td>
+                          <td data-label="Situação">
                             <Badge value={m.status} />
                           </td>
-                          <td>
+                          <td data-label="Ação">
                             {m.status === "CHECKED_OUT" && (
                               <button
                                 disabled={busy}
@@ -829,7 +1068,7 @@ function App() {
                       ADMINISTRADOR: "/administrador/usuarios",
                     }[role];
                     task(async () => {
-                      await api(path, "POST", d);
+                      await api(path, "POST", validateRegistration(d));
                       form.reset();
                       if (admin) setUsers(await api("/administrador/usuarios"));
                       setMessage({ text: "Pessoa cadastrada." });
@@ -845,6 +1084,11 @@ function App() {
                     required
                   />
                   <Field
+                    label="Confirmar CPF"
+                    name="cpfConfirmation"
+                    required
+                  />
+                  <Field
                     label="E-mail institucional"
                     name="email"
                     type="email"
@@ -857,6 +1101,14 @@ function App() {
                     type="password"
                     required
                     minLength="8"
+                  />
+                  <Field
+                    label="Confirmar senha"
+                    name="passwordConfirmation"
+                    type="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
                   />
                   <label>
                     Perfil
@@ -885,7 +1137,7 @@ function App() {
                 <section className="card">
                   <h2>Usuários cadastrados</h2>
                   <div className="table-scroll">
-                    <table>
+                    <table className="responsive-table">
                       <thead>
                         <tr>
                           <th>Nome</th>
@@ -898,11 +1150,11 @@ function App() {
                       <tbody>
                         {users.map((u) => (
                           <tr key={u.id}>
-                            <td>{u.nome}</td>
-                            <td>{u.email}</td>
-                            <td>{labels[u.perfil]}</td>
-                            <td>{u.status}</td>
-                            <td>
+                            <td data-label="Nome">{u.nome}</td>
+                            <td data-label="E-mail">{u.email}</td>
+                            <td data-label="Perfil">{labels[u.perfil]}</td>
+                            <td data-label="Situação">{u.status}</td>
+                            <td data-label="Ação">
                               {u.id !== user.id && (
                                 <button
                                   className="secondary"
@@ -941,7 +1193,7 @@ function App() {
             </>
           )}
         </main>
-        <footer>IFSistem · Gestão de espaços do campus</footer>
+        <footer>IFConect · Gestão de espaços do campus</footer>
       </div>
       {review && (
         <div className="modal-backdrop">
@@ -1018,11 +1270,54 @@ function Pagination({ page, total, setPage, busy }) {
     </div>
   );
 }
-function Checkout({ api, task, busy, roomName, onDone }) {
+function CheckoutNotice({ title, children, error = false }) {
+  return (
+    <div
+      className={`checkout-notice${error ? " checkout-notice-error" : ""}`}
+      role="alert"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v6m0 3v1" />
+      </svg>
+      <div>
+        <strong>{title}</strong>
+        <p>{children}</p>
+      </div>
+    </div>
+  );
+}
+function Checkout({ api, task, busy, roomName, onDone, keys }) {
+  const [checkoutError, setCheckoutError] = useState("");
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
   const [rows, setRows] = useState([]),
     [selected, setSelected] = useState(""),
     [page, setPage] = useState(0),
     [total, setTotal] = useState(0);
+  const reservation = rows.find((row) => row.id === selected);
+  const state = checkoutState(
+    reservation,
+    now,
+    keys.find((key) => key.roomId === reservation?.roomId)?.status,
+  );
+  const impediment =
+    state === "FUTURE"
+      ? `Retirada liberada a partir de ${fmt(reservation.startTime)} (horário de São Paulo).`
+      : state === "ENDED"
+        ? "Esta reserva já terminou. Selecione uma reserva em andamento."
+        : state === "CHECKED_OUT"
+          ? "A chave desta sala já foi retirada. Registre a devolução antes de uma nova retirada."
+          : "";
   async function load() {
     const r = await api(
       `/api/reservations?status=APPROVED&page=${page}&size=20`,
@@ -1040,10 +1335,17 @@ function Checkout({ api, task, busy, roomName, onDone }) {
         onSubmit={(e) => {
           e.preventDefault();
           task(async () => {
-            await api("/api/keys/checkout", "POST", {
-              reservationId: selected,
-            });
+            setCheckoutError("");
+            try {
+              await api("/api/keys/checkout", "POST", {
+                reservationId: selected,
+              });
+            } catch (error) {
+              setCheckoutError(error.message);
+              return;
+            }
             await onDone();
+            await load();
           });
         }}
       >
@@ -1052,7 +1354,10 @@ function Checkout({ api, task, busy, roomName, onDone }) {
           <select
             required
             value={selected}
-            onChange={(e) => setSelected(e.target.value)}
+            onChange={(e) => {
+              setSelected(e.target.value);
+              setCheckoutError("");
+            }}
           >
             <option value="">Selecione uma reserva</option>
             {rows.map((r) => (
@@ -1062,7 +1367,31 @@ function Checkout({ api, task, busy, roomName, onDone }) {
             ))}
           </select>
         </label>
-        <button disabled={busy || !selected}>Registrar retirada</button>
+        {impediment && (
+          <CheckoutNotice
+            title={
+              state === "FUTURE"
+                ? "Ainda não é hora de retirar a chave"
+                : state === "ENDED"
+                  ? "O horário desta reserva já terminou"
+                  : "Esta chave já está em uso"
+            }
+          >
+            {impediment}
+          </CheckoutNotice>
+        )}
+        {checkoutError && (
+          <CheckoutNotice title="Não foi possível registrar a retirada" error>
+            {checkoutError}
+          </CheckoutNotice>
+        )}
+        {state === "READY" && (
+          <p className="muted">
+            Reserva em andamento. A retirada pode ser registrada até{" "}
+            {fmt(reservation.endTime)} (horário de São Paulo).
+          </p>
+        )}
+        <button disabled={busy || state !== "READY"}>Registrar retirada</button>
       </form>
       <Pagination page={page} total={total} setPage={setPage} busy={busy} />
     </>

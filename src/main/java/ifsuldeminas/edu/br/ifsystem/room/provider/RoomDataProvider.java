@@ -7,6 +7,8 @@ import java.util.Optional;
 
 public interface RoomDataProvider {
     List<Room> findAll();
+    default List<ifsuldeminas.edu.br.ifsystem.room.domain.WeeklyClass> findWeeklyClasses() { return List.of(); }
+
 
     default Optional<Room> findById(String id) {
         return findAll().stream().filter(room -> room.id().equals(id)).findFirst();

@@ -60,15 +60,18 @@ public class KeyService {
         if (rooms.findById(reservation.getRoomId()).isEmpty())
             throw error(HttpStatus.NOT_FOUND, "Room not found");
         if (reservation.getStatus() != ReservationStatus.APPROVED)
-            throw error(HttpStatus.CONFLICT, "Approved reservation required");
+            throw error(HttpStatus.CONFLICT, "A retirada exige uma reserva aprovada");
         Instant now = clock.instant();
         if (now.isBefore(reservation.getStartTime()) || !now.isBefore(reservation.getEndTime()))
-            throw error(HttpStatus.CONFLICT, "Checkout is only allowed during the reservation");
+            throw error(HttpStatus.CONFLICT, "A retirada so e permitida durante a reserva: de "
+                + java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.of("America/Sao_Paulo")).format(reservation.getStartTime())
+                + " ate " + java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.of("America/Sao_Paulo")).format(reservation.getEndTime())
+                + " (horario de Sao Paulo)");
         if (reservation.getRequester().getStatus()
                 != ifsuldeminas.edu.br.ifsystem.usuario.domain.StatusUsuario.ATIVO)
-            throw error(HttpStatus.CONFLICT, "Responsible user is inactive");
+            throw error(HttpStatus.CONFLICT, "O responsavel pela reserva esta inativo");
         if (movements.existsByRoomIdAndCheckinAtIsNull(reservation.getRoomId()))
-            throw error(HttpStatus.CONFLICT, "Key is already checked out");
+            throw error(HttpStatus.CONFLICT, "A chave desta sala ja foi retirada. Registre a devolucao antes de uma nova retirada");
         var movement = movements.save(new KeyMovement(reservation, operator, now));
         log.info("Key checked out: {}", movement.getId());
         return MovementResponse.from(movement);

@@ -47,9 +47,10 @@ IDs são derivados dos nomes normalizados se não houver uma coluna de IDs.
 Renomear salas exige preservar seus identificadores por uma coluna imutável.
 Capacidade, bloco, tipo e descrição ficam null quando ausentes na fonte.
 
-**A disponibilidade considera apenas reservas aprovadas. As aulas semanais da
-planilha não bloqueiam automaticamente datas.** Essa integração depende de
-calendário letivo, feriados e exceções.
+A disponibilidade considera reservas aprovadas e as aulas semanais da planilha,
+com feriados, recessos e equivalências de dias letivos definidos no calendário.
+Consultar docs/academic-calendar.md para atualização anual/período. Reservas novas
+e aprovações conflitantes com aulas são recusadas com HTTP 409.
 
 ## API
 

@@ -26,18 +26,21 @@ public class ReservationService {
     private final CurrentUser currentUser;
     private final RoomOperationLock lock;
     private final KeyMovementRepository movements;
+    private final ifsuldeminas.edu.br.ifsystem.room.service.TimetableService timetable;
 
     public ReservationService(
             ReservationRepository repository,
             RoomDataProvider rooms,
             CurrentUser currentUser,
             RoomOperationLock lock,
-            KeyMovementRepository movements) {
+            KeyMovementRepository movements,
+            ifsuldeminas.edu.br.ifsystem.room.service.TimetableService timetable) {
         this.repository = repository;
         this.rooms = rooms;
         this.currentUser = currentUser;
         this.lock = lock;
         this.movements = movements;
+        this.timetable = timetable;
     }
 
     @Transactional
@@ -48,6 +51,7 @@ public class ReservationService {
         validatePeriod(request.startTime(), request.endTime());
         if (rooms.findById(request.roomId()).isEmpty())
             throw error(HttpStatus.NOT_FOUND, "Room not found");
+        timetable.requireNoClass(request.roomId(), request.startTime(), request.endTime());
         lock.acquire(request.roomId());
         return ReservationResponse.from(
                 repository.save(
@@ -60,6 +64,7 @@ public class ReservationService {
         var operator = currentUser.requireOperator();
         Reservation reservation = locked(id);
         requirePending(reservation);
+        timetable.requireNoClass(reservation.getRoomId(), reservation.getStartTime(), reservation.getEndTime());
         if (rooms.findById(reservation.getRoomId()).isEmpty())
             throw error(HttpStatus.NOT_FOUND, "Room not found");
         if (!repository
