@@ -3,7 +3,6 @@
 Arquitetura: navegador → React na Vercel → API Spring Boot → PostgreSQL do
 Supabase. A leitura da planilha continua sendo feita pelo backend. Mantemos o
 JWT/BCrypt do projeto; não estamos migrando para Supabase Auth. Nenhuma senha de
-banco, JWT_SECRET ou service-role key vai para o frontend.
 
 ## Escolha do backend
 
@@ -32,7 +31,6 @@ DB_URL=jdbc:postgresql://HOST-DO-SESSION-POOLER:5432/postgres?sslmode=require
 DB_USERNAME=postgres.REFERENCIA-DO-PROJETO
 DB_PASSWORD=<senha do banco>
 DB_POOL_SIZE=5
-JWT_SECRET=<segredo aleatório de pelo menos 32 bytes>
 APP_ALLOWED_ORIGINS=https://SEU-FRONT.vercel.app
 BOOTSTRAP_ADMIN=true
 ADMIN_CPF=<CPF válido do primeiro administrador>
@@ -77,19 +75,11 @@ Vite local. Acesso remoto usa VITE_API_URL com CORS e cabeçalho Bearer.
 
 Fonte: [Vite na Vercel](https://vercel.com/docs/frameworks/frontend/vite).
 
-## Validação de identidade
+## Login único
 
-CPF: 11 dígitos ou máscara padrão, dois verificadores corretos, sem sequência
-repetida. Apenas a validade matemática é verificada; não consulta a Receita.
-E-mail de ALUNO: domínio exato `alunos.ifsuldeminas.edu.br`. Demais perfis:
-`ifsuldeminas.edu.br`. Cadastro e edição normalizam espaços externos e caixa e
-rejeitam formato ou domínio incorreto. Esta validação não confirma propriedade
-ou existência da caixa postal: não há envio de e-mail de confirmação nesta etapa.
-O login também rejeita CPFs inválidos. Dados antigos inválidos não são corrigidos
-automaticamente; revise-os antes de migrar para produção.
-
-Não há credenciais fixas para desenvolvimento. Configure ADMIN_CPF, ADMIN_EMAIL,
-ADMIN_PASSWORD e BOOTSTRAP_ADMIN=true para provisionar seu administrador local.
+A autenticação e a gestão de usuários pertencem ao IFSISTEM. Siga
+[as instruções SSO](sso-integration.md), incluindo a migração do espelho local e
+o cadastro do cliente. Não configurar JWT_SECRET ou variáveis ADMIN_*.
 
 ## Ping do backend com cron-job.org
 
