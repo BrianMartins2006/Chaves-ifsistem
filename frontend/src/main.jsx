@@ -1,3 +1,4 @@
+import AuthUsers from "./AuthUsers.jsx";
 import PortalLink from "./PortalLink.jsx";
 import Brand from "./Brand.jsx";
 import React, { useEffect, useState, useRef, useId } from "react";
@@ -73,39 +74,11 @@ function Badge({ value }) {
 }
 function Field({ label, ...props }) {
   const id = useId();
-  const [visible, setVisible] = useState(false);
-  const password = props.type === "password";
-  const cpf = props.name === "cpf" || props.name === "cpfConfirmation";
   return (
     <div className="field">
       <label htmlFor={props.id || id}>{label}</label>
-      <span className={password ? "password-control" : "input-control"}>
-        <input
-          id={id}
-          {...props}
-          type={password && visible ? "text" : props.type}
-          {...(cpf
-            ? {
-                inputMode: "numeric",
-                maxLength: 14,
-                placeholder: "000.000.000-00",
-                onInput: (e) => {
-                  e.currentTarget.value = formatCpf(e.currentTarget.value);
-                },
-              }
-            : {})}
-        />
-        {password && (
-          <button
-            type="button"
-            className="password-toggle"
-            aria-label={`${visible ? "Ocultar" : "Mostrar"} ${label.toLowerCase()}`}
-            aria-pressed={visible}
-            onClick={() => setVisible(!visible)}
-          >
-            {visible ? "Ocultar" : "Mostrar"}
-          </button>
-        )}
+      <span className="input-control">
+        <input id={id} {...props} />
       </span>
     </div>
   );
@@ -113,16 +86,24 @@ function Field({ label, ...props }) {
 
 function App() {
   const sessionEpoch = useRef(0);
+  const [loggingOut, setLoggingOut] = useState(false);
   useEffect(() => {
     let active = true;
+    if (sessionStorage.getItem("ifconect.logout") === "true") {
+      sessionStorage.removeItem("ifconect.logout");
+      location.replace(
+        import.meta.env.VITE_PORTAL_URL ||
+          "https://ifsistem-portal.onrender.com/",
+      );
+      return;
+    }
     window.IfsistemSSO.getToken()
       .then(async (access) => {
         if (!active) return;
         if (access) {
           setUser(window.IfsistemSSO.usuario());
           setToken(access);
-        } else if (location.pathname !== "/login.html")
-          await window.IfsistemSSO.login();
+        } else await window.IfsistemSSO.login();
       })
       .catch((e) => {
         if (active) setMessage({ error: true, text: e.message });
@@ -201,6 +182,8 @@ function App() {
   const operator = ["ADMINISTRADOR", "SERVIDOR"].includes(user?.perfil),
     admin = user?.perfil === "ADMINISTRADOR";
   function logout() {
+    setLoggingOut(true);
+    sessionStorage.setItem("ifconect.logout", "true");
     window.IfsistemSSO.logout().catch((e) =>
       setMessage({ error: true, text: e.message }),
     );
@@ -335,8 +318,7 @@ function App() {
   );
   const roomName = (id) => rooms.find((r) => r.id === id)?.name || id;
   const person = (id) =>
-    users.find((u) => u.id === id)?.nome ||
-    (id === user?.id ? user.nome : "Solicitante da reserva");
+    id === user?.id ? user.nome : "Solicitante da reserva";
   async function mutate(path, body, success) {
     await api(path, "POST", body);
     setMessage({ text: success });
@@ -345,27 +327,18 @@ function App() {
   }
   if (!token)
     return (
-      <main className="auth-layout">
-        <section className="auth-story">
-          <Brand />
-          <h1>Seu campus conectado.</h1>
-          <p>Salas, reservas e chaves em um único lugar.</p>
-        </section>
-        <section className="auth-panel">
-          <div className="auth-card">
-            <PortalLink />
-            <h2>Acesse com IFSISTEM</h2>
-            <p>Seu cadastro e sua senha são gerenciados pelo login único.</p>
-            {message && (
-              <div role="alert" className="notice error">
-                {message.text}
-              </div>
-            )}
-            <button onClick={() => task(() => window.IfsistemSSO.login())}>
-              Entrar com IFSISTEM
-            </button>
+      <main className="sso-transition" aria-busy={!message}>
+        <p role="status">
+          {loggingOut
+            ? "Encerrando sessão no IFSISTEM…"
+            : "Redirecionando para o IFSISTEM…"}
+        </p>
+        {message && (
+          <div role="alert" className="notice error">
+            {message.text}
           </div>
-        </section>
+        )}
+        {message && <PortalLink />}
       </main>
     );
   return (
@@ -379,7 +352,12 @@ function App() {
             ["rooms", "Salas e disponibilidade", "▦"],
             ["timetable", "Horários de aulas", "◷"],
             ["reservations", "Reservas", "▤"],
-            ...(operator ? [["keys", "Controle de chaves", "⚿"]] : []),
+            ...(operator
+              ? [
+                  ["keys", "Controle de chaves", "⚿"],
+                  ["users", "Usuários", "♙"],
+                ]
+              : []),
           ].map(([id, label, icon]) => (
             <button
               key={id}
@@ -393,15 +371,6 @@ function App() {
               {label}
             </button>
           ))}
-          {operator && (
-            <a
-              className="users-link"
-              href="https://ifsistem-auth.onrender.com/usuarios.html"
-            >
-              <span aria-hidden="true">♙</span>
-              Usuários
-            </a>
-          )}
         </nav>
         <div className="sidebar-bottom">
           <div className="avatar">{user.nome.slice(0, 1)}</div>
@@ -731,6 +700,7 @@ function App() {
               </div>
             </>
           )}
+          {tab === "users" && operator && <AuthUsers currentUser={user} />}
           {tab === "timetable" && (
             <React.Suspense
               fallback={

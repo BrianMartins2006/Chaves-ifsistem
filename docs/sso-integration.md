@@ -52,7 +52,10 @@ O script oficial foi obtido de /ifsistem-sso.js e copiado sem alterações para
 frontend/public. sso.js configura o cliente, callback.html/callback.js concluem
 PKCE e todas as chamadas de API usam IfsistemSSO.fetch. Dados de usuario() são
 usados só para exibição; autorização continua no backend. O logout chama o auth.
-/login.html oferece entrada explícita; `/` inicia SSO automaticamente sem sessão.
+Não há tela de login local: `/` inicia SSO automaticamente sem sessão.
+O logout encerra a sessão no auth, retorna à URI cadastrada e segue ao portal,
+sem iniciar um novo login automaticamente. A URI de logout cadastrada permanece
+a raiz do módulo. Um marcador temporário em sessionStorage evita esse ciclo.
 
 ## Validação e limitações
 
@@ -70,10 +73,28 @@ persistência de sessão, logout, navegação ao portal e tela de 390px. Auth e 
 são simulados no teste de navegador. Login real com sessão compartilhada ainda
 precisa ser validado após preparar auth e Supabase.
 
-## Acesso à gestão central de usuários
+## Gestão de usuários integrada
 
-O menu apresenta **Usuários** somente para ADMINISTRADOR e SERVIDOR (Secretaria).
-O link abre https://ifsistem-auth.onrender.com/usuarios.html na mesma aba.
-A sessão central do auth será utilizada; não há transferência de tokens na URL,
-acesso direto ao banco externo ou edição do espelho local. A autorização da
-página e das operações continua sendo responsabilidade do auth.
+A aba **Usuários** aparece somente para ADMINISTRADOR e SERVIDOR (Secretaria)
+e é renderizada dentro do IFConect. Segue o contrato API-USUARIOS.md fornecido
+pela equipe do auth em 25/11/2026. Chamadas diretas ao auth utilizam
+IfsistemSSO.fetch, com access token do usuário atual e renovação pelo SDK.
+Nenhum segredo de serviço, senha ou cadastro é gravado no banco do Chaves.
+
+Operações: busca por nome/CPF, filtro por perfil/ativo, paginação de 20 itens,
+cadastro de Professor/Servidor, edição dos dados, ativação/inativação, redefinição
+de senha e exclusão lógica. Senhas têm confirmação e mostrar/ocultar; não são
+exibidas na listagem. O PUT envia todos os campos opcionais preservando o valor
+editado, pois o auth transforma campos omitidos em null. CPF e matrícula não
+são editáveis. A interface impede alterar o próprio perfil, ativar/inativar ou
+excluir a própria conta e não permite atribuir/remover ADMINISTRADOR.
+
+Ações que alteram acesso exigem confirmação; formulários impedem duplo envio.
+Erros usam o campo `erro` do auth, inclusive 403/409; 401 inicia novo login.
+As permissões reais continuam sendo conferidas pelo auth em cada operação.
+Alunos se cadastram no auth. A API de alteração da própria senha (/me/senha)
+não foi adicionada a esta tela administrativa.
+
+Validação por Playwright com API simulada: menu visível para Administrador e
+Servidor e ausente para Aluno/Professor, cadastro, edição, Bearer e celular.
+Nenhum usuário real do auth foi modificado pelos testes.

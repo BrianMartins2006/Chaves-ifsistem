@@ -1309,3 +1309,31 @@ label {
   background: var(--brand-mint);
   border-color: var(--brand-action);
 }
+
+.sso-transition {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 16px;
+  padding: 24px;
+  color: var(--brand-forest);
+}
+.sso-transition .portal-link {
+  color: var(--brand-action);
+  margin: 0;
+  border-color: var(--border);
+}
+
+.user-editor {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--page-background);
+}
+.auth-users td small {
+  display: block;
+}
+.auth-users .actions {
+  flex-wrap: wrap;
+}

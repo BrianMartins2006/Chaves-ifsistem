@@ -49,14 +49,7 @@ const jwt = (claims) =>
           : { content: [], totalPages: 0 },
       });
     });
-    await page.goto(url + "/login.html");
-    await page.getByRole("button", { name: "Entrar com IFSISTEM" }).waitFor();
-    assert.equal(
-      await page
-        .getByRole("link", { name: "Voltar ao portal" })
-        .getAttribute("href"),
-      "https://ifsistem-portal.onrender.com/",
-    );
+    await page.goto(url + "/callback.html");
     await page.evaluate(() =>
       sessionStorage.setItem(
         "ifsistem-sso.chaves.pedido",
@@ -86,23 +79,22 @@ const jwt = (claims) =>
     await page.route("**/oauth2/revoke", (route) =>
       route.fulfill({ status: 200, body: "" }),
     );
-    await page.route("**/connect/logout?**", (route) =>
-      route.fulfill({ body: "Logout do auth simulado" }),
+    await page.route("**/connect/logout?**", (route) => {
+      assert.equal(
+        new URL(route.request().url()).searchParams.get("client_id"),
+        "chaves",
+      );
+      return route.fulfill({ status: 302, headers: { Location: url + "/" } });
+    });
+    await page.route("https://ifsistem-portal.onrender.com/**", (route) =>
+      route.fulfill({ body: "Portal IFSISTEM simulado" }),
     );
     await page.getByRole("button", { name: "Sair da conta" }).click();
-    await page.waitForURL("**/connect/logout?**");
-    assert.equal(new URL(page.url()).searchParams.get("client_id"), "chaves");
-    await page.goto(url + "/login.html");
-    assert.equal(
-      await page.evaluate(() =>
-        sessionStorage.getItem("ifsistem-sso.chaves.tokens"),
-      ),
-      null,
-    );
+    await page.waitForURL("https://ifsistem-portal.onrender.com/**");
     await page.route("**/oauth2/authorize?**", (route) =>
       route.fulfill({ body: "Login do auth simulado" }),
     );
-    await page.getByRole("button", { name: "Entrar com IFSISTEM" }).click();
+    await page.goto(url + "/");
     await page.waitForURL("**/oauth2/authorize?**");
     const authorize = new URL(page.url());
     assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
@@ -131,16 +123,89 @@ const jwt = (claims) =>
       await rolePage
         .getByRole("heading", { name: "Encontre seu espaço" })
         .waitFor();
-      const link = rolePage.getByRole("link", {
+      const link = rolePage.getByRole("button", {
         name: "Usuários",
         exact: true,
       });
       if (["SERVIDOR", "ADMINISTRADOR"].includes(perfil)) {
-        assert.equal(
-          await link.getAttribute("href"),
-          "https://ifsistem-auth.onrender.com/usuarios.html",
-        );
         assert.ok(await link.isVisible());
+        let rows = [
+          {
+            id: "other-user",
+            nome: "Maria SSO",
+            email: "maria@ifsuldeminas.edu.br",
+            matricula: "PRO-1",
+            perfil: "PROFESSOR",
+            ativo: true,
+            status: "ATIVO",
+          },
+        ];
+        await rolePage.route("**/usuarios**", async (route) => {
+          const request = route.request();
+          assert.ok(request.headers().authorization.startsWith("Bearer "));
+          if (request.method() === "GET")
+            return route.fulfill({
+              json: {
+                conteudo: rows,
+                pagina: 0,
+                totalPaginas: 1,
+                totalElementos: rows.length,
+              },
+            });
+          const body = request.postDataJSON();
+          if (request.method() === "POST") {
+            assert.equal(body.perfil, "PROFESSOR");
+            assert.equal(body.senhaInicial, "Temporary123!");
+            rows.push({
+              id: "created",
+              nome: body.nome,
+              email: body.email,
+              perfil: body.perfil,
+              ativo: true,
+              status: "ATIVO",
+            });
+            return route.fulfill({ status: 201, json: rows[1] });
+          }
+          if (request.method() === "PUT") {
+            assert.equal(body.telefone, null);
+            assert.equal(body.curso, null);
+            rows[0] = { ...rows[0], ...body };
+            return route.fulfill({ json: rows[0] });
+          }
+          return route.fulfill({
+            status: 400,
+            json: { status: 400, erro: "Erro de teste" },
+          });
+        });
+        await link.click();
+        await rolePage.getByText("Maria SSO", { exact: true }).waitFor();
+        await rolePage
+          .getByRole("button", { name: "Cadastrar usuário", exact: true })
+          .click();
+        await rolePage.getByLabel("Nome completo").fill("Novo professor");
+        await rolePage
+          .getByLabel("E-mail", { exact: true })
+          .fill("novo@ifsuldeminas.edu.br");
+        await rolePage.getByLabel("CPF", { exact: true }).fill("52998224725");
+        await rolePage
+          .getByLabel("Senha", { exact: true })
+          .fill("Temporary123!");
+        await rolePage
+          .getByLabel("Confirmar senha", { exact: true })
+          .fill("Temporary123!");
+        await rolePage.getByRole("button", { name: "Salvar usuário" }).click();
+        await rolePage
+          .getByText("Alteração salva no IFSISTEM com sucesso.")
+          .waitFor();
+        await rolePage.getByText("Novo professor", { exact: true }).waitFor();
+        await rolePage
+          .getByRole("row")
+          .filter({ hasText: "Maria SSO" })
+          .getByRole("button", { name: "Editar", exact: true })
+          .click();
+        await rolePage.getByLabel("Nome completo").fill("Maria atualizada");
+        await rolePage.getByRole("button", { name: "Salvar usuário" }).click();
+        await rolePage.getByText("Maria atualizada", { exact: true }).waitFor();
       } else assert.equal(await link.count(), 0);
       assert.ok(
         await rolePage.evaluate(
