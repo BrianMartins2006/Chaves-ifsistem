@@ -393,6 +393,15 @@ function App() {
               {label}
             </button>
           ))}
+          {operator && (
+            <a
+              className="users-link"
+              href="https://ifsistem-auth.onrender.com/usuarios.html"
+            >
+              <span aria-hidden="true">♙</span>
+              Usuários
+            </a>
+          )}
         </nav>
         <div className="sidebar-bottom">
           <div className="avatar">{user.nome.slice(0, 1)}</div>
