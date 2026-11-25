@@ -4,46 +4,39 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
+
+
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 public class SecurityConfig {
     @Bean
-    PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+    org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter jwtAuthenticationConverter() {
+        var converter = new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            String perfil = jwt.getClaimAsString("perfil");
+            if (perfil == null || !java.util.Set.of("ALUNO", "PROFESSOR", "SERVIDOR", "ADMINISTRADOR").contains(perfil)) return java.util.List.of();
+            return java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + perfil));
+        });
+        return converter;
     }
-
     @Bean
-    org.springframework.boot.web.servlet.FilterRegistrationBean<JwtFilter> jwtFilterRegistration(
-            JwtFilter filter) {
-        var registration =
-                new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
-        registration.setEnabled(false);
-        return registration;
+    SecurityFilterChain securityFilterChain(HttpSecurity http, ifsuldeminas.edu.br.ifsystem.common.CurrentUser users) throws Exception {
+        return http.addFilterAfter(new SsoMirrorFilter(users), org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class).cors(org.springframework.security.config.Customizer.withDefaults())
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(e -> e.authenticationEntryPoint((req,res,ex) -> jsonError(res,401)).accessDeniedHandler((req,res,ex) -> jsonError(res,403)))
+            .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                .authenticationEntryPoint((req,res,ex) -> jsonError(res,401)).accessDeniedHandler((req,res,ex) -> jsonError(res,403)))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/", "/index.html", "/callback.html", "/login.html", "/ifsistem-sso.js", "/sso.js", "/callback.js", "/assets/**", "/horarios/**", "/favicon.svg", "/error", "/health", "/config").permitAll()
+                .requestMatchers("/administrador/**").hasRole("ADMINISTRADOR")
+                .requestMatchers("/servidor/**").hasAnyRole("ADMINISTRADOR", "SERVIDOR")
+                .anyRequest().authenticated()).build();
     }
-
-    @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtFilter jwtFilter)
-            throws Exception {
-        return http.cors(org.springframework.security.config.Customizer.withDefaults()).addFilterBefore(
-                        jwtFilter,
-                        org.springframework.security.web.authentication
-                                .UsernamePasswordAuthenticationFilter.class)
-                .csrf(csrf -> csrf.disable())
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .exceptionHandling(
-                        errors ->
-                                errors.authenticationEntryPoint(
-                                        (request, response, exception) -> response.sendError(401)))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/auth/login", "/auth/register").permitAll()
-                        .requestMatchers("/", "/index.html", "/assets/**", "/horarios/**", "/favicon.svg", "/error", "/health").permitAll()
-                        .requestMatchers("/administrador/**").hasRole("ADMINISTRADOR")
-                        .requestMatchers("/servidor/**").hasAnyRole("ADMINISTRADOR", "SERVIDOR")
-                        .anyRequest().authenticated())
-                .build();
+    private static void jsonError(jakarta.servlet.http.HttpServletResponse response, int status) throws java.io.IOException {
+        response.setStatus(status); response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"status\":" + status + ",\"detail\":\"" + (status == 401 ? "Autenticacao IFSISTEM necessaria" : "Acesso nao permitido para este perfil") + "\"}");
     }
     @Bean
     org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource(

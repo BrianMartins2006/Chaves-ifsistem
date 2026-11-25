@@ -31,6 +31,7 @@ import javax.sql.DataSource;
 @SpringBootTest
 @ActiveProfiles("demo")
 class DemoModeTest {
+ @org.springframework.test.context.bean.override.mockito.MockitoBean org.springframework.security.oauth2.jwt.JwtDecoder decoder;
     @Autowired DataSource dataSource;
     @Autowired RoomOperationLock lock;
     @Autowired RoomDataProvider rooms;
@@ -64,7 +65,7 @@ class DemoModeTest {
     private void login() {
         SecurityContextHolder.getContext()
                 .setAuthentication(
-                        new UsernamePasswordAuthenticationToken(operator, null, List.of()));
+                        SsoTestTokens.authentication(operator));
     }
 
     @AfterEach
