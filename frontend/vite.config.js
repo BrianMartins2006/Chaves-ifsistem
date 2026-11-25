@@ -4,6 +4,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: new URL("./index.html", import.meta.url).pathname,
+        login: new URL("./login.html", import.meta.url).pathname,
       },
     },
   },

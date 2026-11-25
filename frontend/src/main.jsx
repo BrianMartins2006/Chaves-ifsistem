@@ -1,3 +1,4 @@
+import SsoTransition from "./SsoTransition.jsx";
 import AuthUsers from "./AuthUsers.jsx";
 import PortalLink from "./PortalLink.jsx";
 import Brand from "./Brand.jsx";
@@ -86,17 +87,9 @@ function Field({ label, ...props }) {
 
 function App() {
   const sessionEpoch = useRef(0);
-  const [loggingOut, setLoggingOut] = useState(false);
   useEffect(() => {
     let active = true;
-    if (sessionStorage.getItem("ifconect.logout") === "true") {
-      sessionStorage.removeItem("ifconect.logout");
-      location.replace(
-        import.meta.env.VITE_PORTAL_URL ||
-          "https://ifsistem-portal.onrender.com/",
-      );
-      return;
-    }
+    sessionStorage.removeItem("ifconect.logout");
     window.IfsistemSSO.getToken()
       .then(async (access) => {
         if (!active) return;
@@ -182,8 +175,6 @@ function App() {
   const operator = ["ADMINISTRADOR", "SERVIDOR"].includes(user?.perfil),
     admin = user?.perfil === "ADMINISTRADOR";
   function logout() {
-    setLoggingOut(true);
-    sessionStorage.setItem("ifconect.logout", "true");
     window.IfsistemSSO.logout().catch((e) =>
       setMessage({ error: true, text: e.message }),
     );
@@ -326,21 +317,7 @@ function App() {
     if (tab === "keys") await loadKeys();
   }
   if (!token)
-    return (
-      <main className="sso-transition" aria-busy={!message}>
-        <p role="status">
-          {loggingOut
-            ? "Encerrando sessão no IFSISTEM…"
-            : "Redirecionando para o IFSISTEM…"}
-        </p>
-        {message && (
-          <div role="alert" className="notice error">
-            {message.text}
-          </div>
-        )}
-        {message && <PortalLink />}
-      </main>
-    );
+    return <SsoTransition error={message?.error ? message.text : null} />;
   return (
     <div className="app-shell">
       <aside className="sidebar">

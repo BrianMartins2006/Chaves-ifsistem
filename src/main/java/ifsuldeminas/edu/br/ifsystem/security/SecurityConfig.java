@@ -29,7 +29,7 @@ public class SecurityConfig {
             .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 .authenticationEntryPoint((req,res,ex) -> jsonError(res,401)).accessDeniedHandler((req,res,ex) -> jsonError(res,403)))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/index.html", "/callback.html", "/login.html", "/ifsistem-sso.js", "/sso.js", "/callback.js", "/assets/**", "/horarios/**", "/favicon.svg", "/error", "/health", "/config").permitAll()
+                .requestMatchers("/", "/index.html", "/callback.html", "/login.html", "/ifsistem-sso.js", "/sso.js", "/callback.js", "/sso-transition.css", "/brand/**", "/assets/**", "/horarios/**", "/favicon.svg", "/error", "/health", "/config").permitAll()
                 .requestMatchers("/administrador/**").hasRole("ADMINISTRADOR")
                 .requestMatchers("/servidor/**").hasAnyRole("ADMINISTRADOR", "SERVIDOR")
                 .anyRequest().authenticated()).build();

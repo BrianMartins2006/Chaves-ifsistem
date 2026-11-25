@@ -86,15 +86,22 @@ const jwt = (claims) =>
       );
       return route.fulfill({ status: 302, headers: { Location: url + "/" } });
     });
-    await page.route("https://ifsistem-portal.onrender.com/**", (route) =>
-      route.fulfill({ body: "Portal IFSISTEM simulado" }),
-    );
-    await page.getByRole("button", { name: "Sair da conta" }).click();
-    await page.waitForURL("https://ifsistem-portal.onrender.com/**");
     await page.route("**/oauth2/authorize?**", (route) =>
       route.fulfill({ body: "Login do auth simulado" }),
     );
-    await page.goto(url + "/");
+    await page.getByRole("button", { name: "Sair da conta" }).click();
+    await page.waitForURL("**/oauth2/authorize?**");
+    for (const path of ["/", "/index.html", "/login.html"]) {
+      await page.goto(url + path);
+      await page.waitForURL("**/oauth2/authorize?**");
+    }
+    await page.goto(url + "/callback.html?code=invalid&state=invalid");
+    await page.getByRole("alert").waitFor();
+    assert.ok(
+      await page.getByRole("button", { name: "Tentar novamente" }).isVisible(),
+    );
+    assert.ok(page.url().includes("/callback.html"));
+    await page.getByRole("button", { name: "Tentar novamente" }).click();
     await page.waitForURL("**/oauth2/authorize?**");
     const authorize = new URL(page.url());
     assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
@@ -123,6 +130,10 @@ const jwt = (claims) =>
       await rolePage
         .getByRole("heading", { name: "Encontre seu espaço" })
         .waitFor();
+      for (const path of ["/index.html", "/login.html"]) {
+        await rolePage.goto(url + path);
+        await rolePage.getByRole("heading", {name:"Encontre seu espaço"}).waitFor();
+      }
       const link = rolePage.getByRole("button", {
         name: "Usuários",
         exact: true,
@@ -214,6 +225,26 @@ const jwt = (claims) =>
       );
       await roleContext.close();
     }
+    const slowContext = await browser.newContext();
+    await slowContext.addInitScript(() => {
+      window.addEventListener("DOMContentLoaded", () => {
+        window.IfsistemSSO.getToken = () => new Promise(() => {});
+      });
+    });
+    const slowPage = await slowContext.newPage();
+    await slowPage.goto(url + "/login.html");
+    await slowPage.locator(".sso-spinner").waitFor();
+    assert.equal(
+      await slowPage
+        .getByText("Conectando ao IFSISTEM…", { exact: true })
+        .count(),
+      0,
+    );
+    await slowPage
+      .getByText("Conectando ao IFSISTEM…", { exact: true })
+      .waitFor({ timeout: 7000 });
+    assert.equal(await slowPage.getByRole("button").count(), 0);
+    await slowContext.close();
     console.log(
       "SSO_OK: callback, access token, identidade, sessao, logout, PKCE e celular; auth e API simulados.",
     );

@@ -52,10 +52,11 @@ O script oficial foi obtido de /ifsistem-sso.js e copiado sem alterações para
 frontend/public. sso.js configura o cliente, callback.html/callback.js concluem
 PKCE e todas as chamadas de API usam IfsistemSSO.fetch. Dados de usuario() são
 usados só para exibição; autorização continua no backend. O logout chama o auth.
-Não há tela de login local: `/` inicia SSO automaticamente sem sessão.
-O logout encerra a sessão no auth, retorna à URI cadastrada e segue ao portal,
-sem iniciar um novo login automaticamente. A URI de logout cadastrada permanece
-a raiz do módulo. Um marcador temporário em sessionStorage evita esse ciclo.
+Não há tela de login local: `/`, `/index.html` e `/login.html` iniciam SSO
+sem sessão e abrem o painel com token válido. O logout encerra a sessão no auth
+e retorna à raiz, que inicia novo login automaticamente. A transição mostra
+logo e spinner; após cinco segundos, mostra “Conectando ao IFSISTEM…”. Erros de
+callback exigem “Tentar novamente”, sem redirecionamento automático.
 
 ## Validação e limitações
 
@@ -98,3 +99,14 @@ não foi adicionada a esta tela administrativa.
 Validação por Playwright com API simulada: menu visível para Administrador e
 Servidor e ausente para Aluno/Professor, cadastro, edição, Bearer e celular.
 Nenhum usuário real do auth foi modificado pelos testes.
+
+## Validação SCRUM-X — entrada direta
+
+Linha de base: backend 57 testes e frontend 6 testes, todos verdes. Após a
+alteração: backend 57 e frontend 6, todos verdes; build Vite e verify Maven
+concluídos. Playwright com auth/API simulados validou as três entradas sem
+sessão, index/login com sessão nos quatro perfis, callback válido/erro sem loop,
+logout seguido de novo login, espera de cinco segundos e layout no celular.
+No JAR combinado, raiz, index, login, callback, scripts, CSS e logo responderam
+200 sem token. Login real em deploy ainda requer conferência após a publicação;
+esses testes automatizados não acessaram nem alteraram contas reais do auth.
