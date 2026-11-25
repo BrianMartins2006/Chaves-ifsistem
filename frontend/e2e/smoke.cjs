@@ -303,6 +303,19 @@ const jwt = (claims) =>
     const slowPage = await slowContext.newPage();
     await slowPage.goto(url + "/login.html");
     await slowPage.locator(".sso-spinner").waitFor();
+    await slowPage.setViewportSize({ width: 1600, height: 805 });
+    await slowPage.screenshot({ path: "/tmp/ifconect-loading-reference.png" });
+    const spinner = await slowPage.locator(".sso-spinner").boundingBox();
+    assert.ok(
+      spinner.y < 230 && Math.abs(spinner.x + spinner.width / 2 - 800) < 2,
+    );
+    await slowPage.setViewportSize({ width: 390, height: 844 });
+    assert.ok(
+      await slowPage.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    );
+
     assert.equal(
       await slowPage
         .getByText("Conectando ao IFSISTEM…", { exact: true })
