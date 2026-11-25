@@ -69,3 +69,11 @@ Playwright passaram: callback com nonce/state, PKCE S256, access token no Bearer
 persistência de sessão, logout, navegação ao portal e tela de 390px. Auth e API
 são simulados no teste de navegador. Login real com sessão compartilhada ainda
 precisa ser validado após preparar auth e Supabase.
+
+## Acesso à gestão central de usuários
+
+O menu apresenta **Usuários** somente para ADMINISTRADOR e SERVIDOR (Secretaria).
+O link abre https://ifsistem-auth.onrender.com/usuarios.html na mesma aba.
+A sessão central do auth será utilizada; não há transferência de tokens na URL,
+acesso direto ao banco externo ou edição do espelho local. A autorização da
+página e das operações continua sendo responsabilidade do auth.

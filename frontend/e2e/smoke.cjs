@@ -107,6 +107,48 @@ const jwt = (claims) =>
     const authorize = new URL(page.url());
     assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
     assert.equal(authorize.searchParams.get("client_id"), "chaves");
+    for (const perfil of ["ALUNO", "PROFESSOR", "SERVIDOR", "ADMINISTRADOR"]) {
+      const roleContext = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+      });
+      const rolePage = await roleContext.newPage();
+      await roleContext.addInitScript(
+        ({ access }) => {
+          sessionStorage.setItem(
+            "ifsistem-sso.chaves.tokens",
+            JSON.stringify({
+              access,
+              refresh: "mock",
+              id: access,
+              expiraEm: Math.floor(Date.now() / 1000) + 3600,
+            }),
+          );
+        },
+        { access: jwt({ ...identity, perfil }) },
+      );
+      await rolePage.route("**/api/**", (route) => route.fulfill({ json: [] }));
+      await rolePage.goto(url + "/");
+      await rolePage
+        .getByRole("heading", { name: "Encontre seu espaço" })
+        .waitFor();
+      const link = rolePage.getByRole("link", {
+        name: "Usuários",
+        exact: true,
+      });
+      if (["SERVIDOR", "ADMINISTRADOR"].includes(perfil)) {
+        assert.equal(
+          await link.getAttribute("href"),
+          "https://ifsistem-auth.onrender.com/usuarios.html",
+        );
+        assert.ok(await link.isVisible());
+      } else assert.equal(await link.count(), 0);
+      assert.ok(
+        await rolePage.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      );
+      await roleContext.close();
+    }
     console.log(
       "SSO_OK: callback, access token, identidade, sessao, logout, PKCE e celular; auth e API simulados.",
     );

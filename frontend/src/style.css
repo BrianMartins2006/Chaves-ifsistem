@@ -268,7 +268,7 @@ form {
   display: grid;
   gap: 6px;
 }
-.sidebar nav button {
+.sidebar nav :is(button, .users-link) {
   background: transparent;
   color: #c2d8cb;
   display: flex;
@@ -279,11 +279,11 @@ form {
   font-size: 0.93rem;
   padding: 13px 12px;
 }
-.sidebar nav button span {
+.sidebar nav :is(button, .users-link) span {
   font-size: 1.2rem;
   width: 20px;
 }
-.sidebar nav button.active {
+.sidebar nav :is(button, .users-link).active {
   background: #ffffff16;
   color: #fff;
   box-shadow: inset 3px 0 #9ac998;
@@ -652,12 +652,12 @@ footer {
     display: flex;
     overflow: auto;
   }
-  .sidebar nav button {
+  .sidebar nav :is(button, .users-link) {
     white-space: nowrap;
     font-size: 0.8rem;
     padding: 10px;
   }
-  .sidebar nav button span {
+  .sidebar nav :is(button, .users-link) span {
     display: none;
   }
   .sidebar-bottom {
@@ -964,7 +964,7 @@ footer {
     padding-bottom: 4px;
     scrollbar-width: thin;
   }
-  .sidebar nav button {
+  .sidebar nav :is(button, .users-link) {
     font-size: 0.875rem;
     min-height: 44px;
   }
@@ -1146,18 +1146,18 @@ button:hover:not(:disabled) {
 .auth-story small,
 .auth-story .eyebrow,
 .story-grid,
-.sidebar nav button,
+.sidebar nav :is(button, .users-link),
 .nav-caption,
 .sidebar-bottom small,
 .logout {
   color: var(--brand-mint);
 }
-.sidebar nav button.active {
+.sidebar nav :is(button, .users-link).active {
   background: var(--brand-mint);
   color: var(--brand-forest);
   box-shadow: inset 3px 0 var(--brand-bright);
 }
-.sidebar nav button:hover:not(:disabled) {
+.sidebar nav :is(button, .users-link):hover:not(:disabled) {
   background: var(--brand-hover);
   color: white;
 }
