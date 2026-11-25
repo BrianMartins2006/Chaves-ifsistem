@@ -6,7 +6,6 @@ import "./style.css";
 import RoomAgenda from "./RoomAgenda.jsx";
 import { normalizeSearch, shiftDate, checkoutState } from "./schedule.js";
 const InstituteTimetable = React.lazy(() => import("./InstituteTimetable.jsx"));
-import { formatCpf, validateRegistration } from "./identity.js";
 
 const labels = {
   PENDING: "Pendente",
@@ -114,6 +113,24 @@ function Field({ label, ...props }) {
 
 function App() {
   const sessionEpoch = useRef(0);
+  useEffect(() => {
+    let active = true;
+    window.IfsistemSSO.getToken()
+      .then(async (access) => {
+        if (!active) return;
+        if (access) {
+          setUser(window.IfsistemSSO.usuario());
+          setToken(access);
+        } else if (location.pathname !== "/login.html")
+          await window.IfsistemSSO.login();
+      })
+      .catch((e) => {
+        if (active) setMessage({ error: true, text: e.message });
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const reservationLock = useRef(false),
     reservationNotice = useRef(null);
   const [reservationSending, setReservationSending] = useState(false);
@@ -122,14 +139,12 @@ function App() {
   const [token, setToken] = useState(null),
     [user, setUser] = useState(null),
     [tab, setTab] = useState("rooms");
-  const [signup, setSignup] = useState(false),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [message, setMessage] = useState(null);
   const [rooms, setRooms] = useState([]),
     [reservations, setReservations] = useState({ content: [], totalPages: 0 }),
     [keys, setKeys] = useState([]),
-    [history, setHistory] = useState({ content: [], totalPages: 0 }),
-    [users, setUsers] = useState([]);
+    [history, setHistory] = useState({ content: [], totalPages: 0 });
   const [roomSearch, setRoomSearch] = useState("");
   const [agendaError, setAgendaError] = useState("");
   const [agendaLoading, setAgendaLoading] = useState(false),
@@ -186,13 +201,16 @@ function App() {
   const operator = ["ADMINISTRADOR", "SERVIDOR"].includes(user?.perfil),
     admin = user?.perfil === "ADMINISTRADOR";
   function logout() {
+    window.IfsistemSSO.logout().catch((e) =>
+      setMessage({ error: true, text: e.message }),
+    );
     sessionEpoch.current++;
     setSentReservations({});
     setReservationError(null);
     setToken(null);
     setUser(null);
     setRooms([]);
-    setUsers([]);
+
     setKeys([]);
     setHistory({ content: [] });
     setReservations({ content: [] });
@@ -206,11 +224,11 @@ function App() {
   }
   async function api(path, method = "GET", body, auth = token) {
     const epoch = sessionEpoch.current;
-    const r = await fetch(apiBase + path, {
+    const r = await window.IfsistemSSO.fetch(apiBase + path, {
       method,
       headers: {
         Accept: "application/json",
-        ...(auth ? { Authorization: `Bearer ${auth}` } : {}),
+
         ...(body ? { "Content-Type": "application/json" } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -274,8 +292,6 @@ function App() {
     task(async () => {
       if (tab === "reservations") await loadReservations();
       if (tab === "keys" && operator) await loadKeys();
-      if (tab === "users" && operator)
-        setUsers(admin ? await api("/administrador/usuarios") : []);
     });
   }, [token, tab, page, status, historyPage]);
   useEffect(() => {
@@ -321,27 +337,6 @@ function App() {
   const person = (id) =>
     users.find((u) => u.id === id)?.nome ||
     (id === user?.id ? user.nome : "Solicitante da reserva");
-  async function authenticate(e) {
-    e.preventDefault();
-    const form = e.currentTarget,
-      data = Object.fromEntries(new FormData(form));
-    await task(async () => {
-      if (signup) {
-        const request = validateRegistration(data);
-        request.periodo = Number(request.periodo);
-        await api("/auth/register", "POST", request, null);
-        setSignup(false);
-        setMessage({ text: "Conta criada. Entre com seu CPF e senha." });
-        form.reset();
-      } else {
-        const auth = await api("/auth/login", "POST", data, null),
-          me = await api("/auth/me", "GET", null, auth.token);
-        setUser(me);
-        setToken(auth.token);
-        form.reset();
-      }
-    });
-  }
   async function mutate(path, body, success) {
     await api(path, "POST", body);
     setMessage({ text: success });
@@ -353,119 +348,22 @@ function App() {
       <main className="auth-layout">
         <section className="auth-story">
           <Brand />
-          <div>
-            <span className="eyebrow">CAMPUS ORGANIZADO</span>
-            <h1>
-              O espaço certo.
-              <br />
-              Na hora certa.
-            </h1>
-            <p>
-              Salas, reservas e chaves em um único lugar. Mais clareza para quem
-              estuda, ensina e cuida do campus.
-            </p>
-            <div className="story-grid">
-              <span>01 · Encontre uma sala</span>
-              <span>02 · Reserve seu horário</span>
-              <span>03 · Retire sua chave</span>
-            </div>
-          </div>
-          <small>Sistema de gestão de espaços · IFSULDEMINAS</small>
+          <h1>Seu campus conectado.</h1>
+          <p>Salas, reservas e chaves em um único lugar.</p>
         </section>
         <section className="auth-panel">
           <div className="auth-card">
             <PortalLink />
-            <span className="eyebrow">BEM-VINDO AO IFCONECT</span>
-            <h2>{signup ? "Crie sua conta" : "Acesse sua conta"}</h2>
-            <p>
-              {signup
-                ? "Cadastro de aluno com e-mail institucional."
-                : "Entre para organizar seu próximo encontro."}
-            </p>
+            <h2>Acesse com IFSISTEM</h2>
+            <p>Seu cadastro e sua senha são gerenciados pelo login único.</p>
             {message && (
-              <div
-                role="alert"
-                className={"notice " + (message.error ? "error" : "")}
-              >
+              <div role="alert" className="notice error">
                 {message.text}
               </div>
             )}
-            <form onSubmit={authenticate}>
-              {signup && (
-                <>
-                  <Field
-                    label="Nome completo"
-                    name="nome"
-                    required
-                    autoComplete="name"
-                  />
-                  <Field
-                    label="E-mail institucional"
-                    name="email"
-                    type="email"
-                    placeholder="nome@alunos.ifsuldeminas.edu.br"
-                    required
-                  />
-                  <Field label="Matrícula" name="matricula" required />
-                </>
-              )}
-              <Field
-                label="CPF"
-                pattern="(?:[0-9]{11}|[0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})"
-                title="Informe 11 números ou o formato 000.000.000-00"
-                name="cpf"
-                required
-                autoComplete="username"
-                inputMode="numeric"
-              />
-              {signup && (
-                <Field label="Confirmar CPF" name="cpfConfirmation" required />
-              )}
-              <Field
-                label="Senha"
-                name="senha"
-                type="password"
-                minLength={signup ? 8 : undefined}
-                required
-                autoComplete={signup ? "new-password" : "current-password"}
-              />
-              {signup && (
-                <Field
-                  label="Confirmar senha"
-                  name="passwordConfirmation"
-                  type="password"
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                />
-              )}
-              {signup && (
-                <div className="form-grid">
-                  <Field label="Curso" name="curso" required />
-                  <Field
-                    label="Período"
-                    name="periodo"
-                    type="number"
-                    min="1"
-                    required
-                  />
-                </div>
-              )}
-              <button disabled={busy}>
-                {busy ? "Aguarde…" : signup ? "Criar conta" : "Entrar"}
-              </button>
-            </form>
-            <button
-              className="text-button"
-              disabled={busy}
-              onClick={() => {
-                setSignup(!signup);
-                setMessage(null);
-              }}
-            >
-              {signup ? "Já tenho uma conta" : "Sou aluno e quero me cadastrar"}
+            <button onClick={() => task(() => window.IfsistemSSO.login())}>
+              Entrar com IFSISTEM
             </button>
-            <small>O acesso às funções depende do seu perfil.</small>
           </div>
         </section>
       </main>
@@ -481,12 +379,7 @@ function App() {
             ["rooms", "Salas e disponibilidade", "▦"],
             ["timetable", "Horários de aulas", "◷"],
             ["reservations", "Reservas", "▤"],
-            ...(operator
-              ? [
-                  ["keys", "Controle de chaves", "⚿"],
-                  ["users", "Pessoas", "♙"],
-                ]
-              : []),
+            ...(operator ? [["keys", "Controle de chaves", "⚿"]] : []),
           ].map(([id, label, icon]) => (
             <button
               key={id}
@@ -1043,154 +936,6 @@ function App() {
                   busy={busy}
                 />
               </section>
-            </>
-          )}
-          {tab === "users" && (
-            <>
-              <section className="card">
-                <h2>Cadastrar pessoa</h2>
-                <form
-                  className="user-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const form = e.currentTarget,
-                      d = Object.fromEntries(new FormData(form));
-                    const role = d.role;
-                    delete d.role;
-                    if (role === "ALUNO") d.periodo = Number(d.periodo);
-                    else {
-                      delete d.periodo;
-                      delete d.curso;
-                    }
-                    const path = {
-                      ALUNO: "/servidor/alunos",
-                      PROFESSOR: "/servidor/professores",
-                      SERVIDOR: "/administrador/servidores",
-                      ADMINISTRADOR: "/administrador/usuarios",
-                    }[role];
-                    task(async () => {
-                      await api(path, "POST", validateRegistration(d));
-                      form.reset();
-                      if (admin) setUsers(await api("/administrador/usuarios"));
-                      setMessage({ text: "Pessoa cadastrada." });
-                    });
-                  }}
-                >
-                  <Field label="Nome completo" name="nome" required />
-                  <Field
-                    label="CPF"
-                    pattern="(?:[0-9]{11}|[0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2})"
-                    title="Informe 11 números ou o formato 000.000.000-00"
-                    name="cpf"
-                    required
-                  />
-                  <Field
-                    label="Confirmar CPF"
-                    name="cpfConfirmation"
-                    required
-                  />
-                  <Field
-                    label="E-mail institucional"
-                    name="email"
-                    type="email"
-                    required
-                  />
-                  <Field label="Matrícula" name="matricula" required />
-                  <Field
-                    label="Senha inicial"
-                    name="senha"
-                    type="password"
-                    required
-                    minLength="8"
-                  />
-                  <Field
-                    label="Confirmar senha"
-                    name="passwordConfirmation"
-                    type="password"
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                  />
-                  <label>
-                    Perfil
-                    <select name="role">
-                      {(admin
-                        ? ["ALUNO", "PROFESSOR", "SERVIDOR", "ADMINISTRADOR"]
-                        : ["ALUNO", "PROFESSOR"]
-                      ).map((p) => (
-                        <option key={p} value={p}>
-                          {labels[p]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <Field label="Curso · somente aluno" name="curso" />
-                  <Field
-                    label="Período · somente aluno"
-                    name="periodo"
-                    type="number"
-                    min="1"
-                  />
-                  <button disabled={busy}>Cadastrar pessoa</button>
-                </form>
-              </section>
-              {admin && (
-                <section className="card">
-                  <h2>Usuários cadastrados</h2>
-                  <div className="table-scroll">
-                    <table className="responsive-table">
-                      <thead>
-                        <tr>
-                          <th>Nome</th>
-                          <th>E-mail</th>
-                          <th>Perfil</th>
-                          <th>Situação</th>
-                          <th>Ação</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {users.map((u) => (
-                          <tr key={u.id}>
-                            <td data-label="Nome">{u.nome}</td>
-                            <td data-label="E-mail">{u.email}</td>
-                            <td data-label="Perfil">{labels[u.perfil]}</td>
-                            <td data-label="Situação">{u.status}</td>
-                            <td data-label="Ação">
-                              {u.id !== user.id && (
-                                <button
-                                  className="secondary"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    task(async () => {
-                                      await api(
-                                        `/administrador/usuarios/${u.id}/status`,
-                                        "PATCH",
-                                        {
-                                          status:
-                                            u.status === "ATIVO"
-                                              ? "INATIVO"
-                                              : "ATIVO",
-                                        },
-                                      );
-                                      setUsers(
-                                        await api("/administrador/usuarios"),
-                                      );
-                                    })
-                                  }
-                                >
-                                  {u.status === "ATIVO"
-                                    ? "Desativar"
-                                    : "Ativar"}
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              )}
             </>
           )}
         </main>

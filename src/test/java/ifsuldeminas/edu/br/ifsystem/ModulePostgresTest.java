@@ -12,7 +12,7 @@ import ifsuldeminas.edu.br.ifsystem.reservation.domain.*;
 import ifsuldeminas.edu.br.ifsystem.reservation.repository.ReservationRepository;
 import ifsuldeminas.edu.br.ifsystem.reservation.service.ReservationService;
 import ifsuldeminas.edu.br.ifsystem.room.service.RoomService;
-import ifsuldeminas.edu.br.ifsystem.security.JwtService;
+
 import ifsuldeminas.edu.br.ifsystem.usuario.domain.*;
 import ifsuldeminas.edu.br.ifsystem.usuario.repository.UsuarioRepository;
 
@@ -60,12 +60,13 @@ class ModulePostgresTest {
     @Autowired KeyService keys;
     @Autowired RoomService rooms;
     @Autowired MockMvc mvc;
-    @Autowired JwtService jwt;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean org.springframework.security.oauth2.jwt.JwtDecoder decoder;
     Usuario student, teacher, operator;
     Instant start, end;
 
     @BeforeEach
     void setup() {
+        org.mockito.Mockito.when(decoder.decode(org.mockito.ArgumentMatchers.anyString())).thenAnswer(i -> SsoTestTokens.decode(i.getArgument(0)));
         SecurityContextHolder.clearContext();
         movements.deleteAll();
         reservations.deleteAll();
@@ -98,7 +99,7 @@ class ModulePostgresTest {
 
     private void login(Usuario user) {
         SecurityContextHolder.getContext()
-                .setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
+                .setAuthentication(SsoTestTokens.authentication(user));
     }
 
     private UUID create(Usuario user, Instant from, Instant to) {
@@ -330,7 +331,7 @@ class ModulePostgresTest {
 
     @Test
     void restEndpointsAcceptExistingJwtAndDoNotExposeUserSecrets() throws Exception {
-        String token = jwt.gerar(student);
+        String token = SsoTestTokens.token(student);
         mvc.perform(get("/api/rooms").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").exists());
@@ -365,7 +366,7 @@ class ModulePostgresTest {
 
     @Test
     void malformedRequestsReturn400() throws Exception {
-        var token = jwt.gerar(operator);
+        var token = SsoTestTokens.token(operator);
         mvc.perform(
                         get("/api/rooms/sala-114/availability")
                                 .param("date", "invalid")
@@ -403,7 +404,7 @@ class ModulePostgresTest {
     @Test
     void operatorRestWorkflowSupportsReviewCheckoutReturnAndFilters() throws Exception {
         UUID id = create(student, start, end);
-        String authorization = "Bearer " + jwt.gerar(operator);
+        String authorization = "Bearer " + SsoTestTokens.token(operator);
         SecurityContextHolder.clearContext();
         mvc.perform(
                         get("/api/reservations")
@@ -461,72 +462,6 @@ class ModulePostgresTest {
     }
 
     @Test
-    void registrationAndLoginReturnValidationDetails() throws Exception {
-        mvc.perform(
-                        post("/auth/register")
-                                .contentType("application/json")
-                                .content(
-                                        """
-{"nome":"Teste", "cpf":"90000000418", "email":"teste@example.com",
- "matricula":"validation-test", "senha":"Password123", "curso":"Computação", "periodo":1}
-"""))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("Email institucional invalido: utilize @alunos.ifsuldeminas.edu.br"));
-        mvc.perform(
-                        post("/auth/register")
-                                .contentType("application/json")
-                                .content(
-                                        """
-{"nome":"Teste", "cpf":"90000000418", "email":"teste@alunos.ifsuldeminas.edu.br",
- "matricula":"validation-test", "senha":"123", "curso":"Computação", "periodo":1}
-"""))
-                .andExpect(status().isBadRequest())
-                .andExpect(
-                        jsonPath("$.detail").value("A senha deve possuir ao menos 8 caracteres"));
-        mvc.perform(post("/auth/register").contentType("application/json").content("{}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("Dados obrigatorios ausentes"));
-        mvc.perform(
-                        post("/auth/login")
-                                .contentType("application/json")
-                                .content("{\"cpf\":\"90000000418\",\"senha\":\"Password123\"}"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.detail").value("Credenciais invalidas"));
-    }
-
-    @Test
-    void privilegedUserCreationRequiresTheAppropriateRole() throws Exception {
-        mvc.perform(post("/administrador/servidores").contentType("application/json").content("{}"))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(post("/administrador/servidores").header("Authorization", "Bearer " + jwt.gerar(student))
-                        .contentType("application/json").content("{}"))
-                .andExpect(status().isForbidden());
-        mvc.perform(get("/administrador/usuarios").header("Authorization", "Bearer " + jwt.gerar(operator)))
-                .andExpect(status().isForbidden());
-        mvc.perform(post("/servidor/professores").header("Authorization", "Bearer " + jwt.gerar(student))
-                        .contentType("application/json").content("{}"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    void publicRegistrationCreatesOnlyStudentsAndSupportsLoginAndMe() throws Exception {
-        mvc.perform(post("/auth/register").contentType("application/json")
-                        .content("""
-                            {"nome":"Aluno novo", "cpf":"90000000841", "email":"novo@alunos.ifsuldeminas.edu.br",
-                             "matricula":"novo", "senha":"Password123!", "curso":"Computação", "periodo":1}
-                            """))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.perfil").value("ALUNO"))
-                .andExpect(jsonPath("$.senha").doesNotExist());
-        var response = mvc.perform(post("/auth/login").contentType("application/json")
-                        .content("{\"cpf\":\"90000000841\",\"senha\":\"Password123!\"}"))
-                .andExpect(status().isOk()).andReturn();
-        String token = com.jayway.jsonpath.JsonPath.read(response.getResponse().getContentAsString(), "$.token");
-        mvc.perform(get("/auth/me").header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.nome").value("Aluno novo"));
-        mvc.perform(get("/auth/me")).andExpect(status().isUnauthorized());
-    }
-
-    @Test
     void corsAllowsConfiguredFrontendAndHealthIsPublic() throws Exception {
         mvc.perform(options("/api/rooms").header("Origin", "http://localhost:5173")
                         .header("Access-Control-Request-Method", "GET")
@@ -539,6 +474,32 @@ class ModulePostgresTest {
         mvc.perform(get("/health")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UP"));
     }
 
+    @Test
+    void ssoUpsertsIdentityFromValidatedClaimsWithoutPassword() throws Exception {
+        var fresh = Usuario.fromSso(UUID.randomUUID(), "Usuario SSO", "90000000841", Perfil.ALUNO);
+        mvc.perform(get("/api/rooms").header("Authorization", "Bearer " + SsoTestTokens.token(fresh))).andExpect(status().isOk());
+        var mirror = users.findById(fresh.getId()).orElseThrow();
+        assertNull(mirror.getSenha()); assertEquals("Usuario SSO", mirror.getNome());
+        fresh.syncSso("Nome atualizado", fresh.getCpf(), Perfil.SERVIDOR);
+        mvc.perform(get("/api/keys/status").header("Authorization", "Bearer " + SsoTestTokens.token(fresh))).andExpect(status().isOk());
+        mirror = users.findById(fresh.getId()).orElseThrow();
+        assertEquals("Nome atualizado", mirror.getNome()); assertEquals(Perfil.SERVIDOR, mirror.getPerfil());
+    }
+    @Test
+    void missingProfileHasNoRoleAndIsRejected() throws Exception {
+        var token = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("missing-profile").header("alg", "RS256")
+            .subject(UUID.randomUUID().toString()).claim("nome", "Sem perfil").claim("cpf", "90000000841").build();
+        org.mockito.Mockito.doReturn(token).when(decoder).decode("missing-profile");
+        mvc.perform(get("/api/keys/status").header("Authorization", "Bearer missing-profile"))
+            .andExpect(status().isForbidden());
+    }
+    @Test
+    void localLoginAndUserManagementAreNoLongerAvailableAnonymously() throws Exception {
+        mvc.perform(post("/auth/login").contentType("application/json").content("{}"))
+            .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.status").value(401));
+        mvc.perform(get("/administrador/usuarios").header("Authorization", "Bearer " + SsoTestTokens.token(student)))
+            .andExpect(status().isForbidden());
+    }
     private List<Integer> race(Runnable first, Runnable second) throws Exception {
         var barrier = new CyclicBarrier(2);
         try (var pool = Executors.newFixedThreadPool(2)) {

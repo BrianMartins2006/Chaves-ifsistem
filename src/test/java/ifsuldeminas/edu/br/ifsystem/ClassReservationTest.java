@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(properties={"app.rooms.location=classpath:classes-test.csv","spring.datasource.url=jdbc:h2:mem:class-reservations;DB_CLOSE_DELAY=-1"})
 @ActiveProfiles("demo")
 class ClassReservationTest {
+ @org.springframework.test.context.bean.override.mockito.MockitoBean org.springframework.security.oauth2.jwt.JwtDecoder decoder;
  @Autowired UsuarioRepository users;
  @Autowired ReservationRepository reservations;
  @Autowired ReservationService service;
@@ -25,7 +26,7 @@ class ClassReservationTest {
  @BeforeEach void setup(){
   reservations.deleteAll();users.deleteAll();
   operator=users.save(new Usuario("Test operator","90000000175","operator@ifsuldeminas.edu.br","operator","not-used",null,null,null,Perfil.SERVIDOR));
-  SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(operator,null,List.of()));
+  SecurityContextHolder.getContext().setAuthentication(SsoTestTokens.authentication(operator));
  }
  @AfterEach void clear(){SecurityContextHolder.clearContext();}
  @Test void cannotRequestAnIntervalOccupiedByAClass(){

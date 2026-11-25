@@ -1,3 +1,6 @@
+> Autenticação atual: login único IFSISTEM, RS256 e espelho por UUID.
+> Cadastro, senhas e gestão de usuários foram removidos; veja [SSO](sso-integration.md).
+
 # Backend de salas, reservas e chaves
 
 Java 21, Spring Boot 4.1.1, Maven, Spring Data JPA e PostgreSQL. Reutiliza os

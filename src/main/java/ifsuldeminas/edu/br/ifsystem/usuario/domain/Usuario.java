@@ -22,17 +22,16 @@ import java.util.UUID;
 })
 public class Usuario {
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
     @Column(nullable = false)
     private String nome;
     @Column(nullable = false, length = 11)
     private String cpf;
-    @Column(nullable = false)
+    @Column
     private String email;
-    @Column(nullable = false)
+    @Column
     private String matricula;
-    @Column(nullable = false)
+    @Column
     private String senha;
     private String telefone;
     private String curso;
@@ -53,6 +52,7 @@ public class Usuario {
 
     public Usuario(String nome, String cpf, String email, String matricula, String senha,
                    String telefone, String curso, Integer periodo, Perfil perfil) {
+        this.id = UUID.randomUUID();
         this.nome = nome;
         this.cpf = cpf;
         this.email = email;
@@ -67,6 +67,15 @@ public class Usuario {
         this.atualizadoEm = this.criadoEm;
     }
 
+    public static Usuario fromSso(UUID id, String nome, String cpf, Perfil perfil) {
+        var user = new Usuario(nome, cpf, null, null, null, null, null, null, perfil);
+        user.id = id;
+        return user;
+    }
+    public void syncSso(String nome, String cpf, Perfil perfil) {
+        this.nome = nome; this.cpf = cpf; this.perfil = perfil;
+        this.status = StatusUsuario.ATIVO; this.senha = null;
+    }
     @PreUpdate
     void atualizarData() {
         atualizadoEm = OffsetDateTime.now();
