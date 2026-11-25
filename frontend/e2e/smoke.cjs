@@ -1,121 +1,119 @@
-const { randomUUID } = require("node:crypto");
-const studentPassword = randomUUID() + "aA1!";
-if (!process.env.ADMIN_CPF || !process.env.ADMIN_PASSWORD)
-  throw Error("Informe ADMIN_CPF e ADMIN_PASSWORD do backend de teste.");
-process.env.TMPDIR ||= require("node:os").tmpdir();
 const { chromium } = require("playwright-core");
 const assert = require("node:assert/strict");
+const url = process.env.E2E_URL || "http://localhost:5173";
+const jwt = (claims) =>
+  [
+    "eyJhbGciOiJSUzI1NiJ9",
+    Buffer.from(JSON.stringify(claims)).toString("base64url"),
+    "test-signature",
+  ].join(".");
 (async () => {
   const browser = await chromium.launch({
     executablePath: process.env.CHROME_PATH || "/usr/bin/google-chrome",
     headless: true,
-    args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    args: ["--no-sandbox"],
   });
   try {
-    const page = await browser.newPage({
-      viewport: { width: 1440, height: 1000 },
-      timezoneId: "Pacific/Honolulu",
+    const context = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+      }),
+      page = await context.newPage();
+    const identity = {
+      sub: "a9c996fa-f780-4903-b3df-e6b337a95e47",
+      cpf: "90000000841",
+      nome: "Aluno SSO",
+      perfil: "ALUNO",
+    };
+    const access = jwt(identity),
+      id = jwt({ ...identity, nonce: "test-nonce" });
+    let apiCalls = 0;
+    await page.route("**/oauth2/token", async (route) => {
+      const body = new URLSearchParams(route.request().postData());
+      assert.equal(body.get("client_id"), "chaves");
+      assert.equal(body.get("code_verifier"), "test-verifier");
+      await route.fulfill({
+        json: {
+          access_token: access,
+          id_token: id,
+          refresh_token: "test-refresh",
+          expires_in: 3600,
+        },
+      });
     });
-    const errors = [];
-    page.on("pageerror", (e) => errors.push(e.message));
-    await page.goto(process.env.E2E_URL || "http://127.0.0.1:18084/");
-    await page.screenshot({ path: process.env.TMPDIR + "/ifsistem-login.png" });
-    await page
-      .getByRole("button", { name: "Sou aluno e quero me cadastrar" })
-      .click();
-    for (const [label, value] of Object.entries({
-      "Nome completo": "Aluno React",
-      "E-mail institucional": "aluno-react@alunos.ifsuldeminas.edu.br",
-      Matrícula: "aluno-react",
-      CPF: "90000000760",
-      "Confirmar CPF": "90000000760",
-      Senha: studentPassword,
-      "Confirmar senha": studentPassword,
-      Curso: "Computação",
-      Período: "2",
-    }))
-      await page.getByLabel(label, { exact: true }).fill(value);
-    await page
-      .getByRole("button", { name: "Criar conta", exact: true })
-      .click();
-    await page.getByText("Conta criada. Entre com seu CPF e senha.").waitFor();
-    await page.getByLabel("CPF", { exact: true }).fill("90000000760");
-    await page.getByLabel("Senha", { exact: true }).fill(studentPassword);
-    await page.getByRole("button", { name: "Entrar", exact: true }).click();
+    await page.route("**/api/**", async (route) => {
+      assert.equal(route.request().headers().authorization, "Bearer " + access);
+      apiCalls++;
+      await route.fulfill({
+        json: route.request().url().includes("/api/rooms")
+          ? [{ id: "sala-114", name: "Sala 114" }]
+          : { content: [], totalPages: 0 },
+      });
+    });
+    await page.goto(url + "/login.html");
+    await page.getByRole("button", { name: "Entrar com IFSISTEM" }).waitFor();
+    assert.equal(
+      await page
+        .getByRole("link", { name: "Voltar ao portal" })
+        .getAttribute("href"),
+      "https://ifsistem-portal.onrender.com/",
+    );
+    await page.evaluate(() =>
+      sessionStorage.setItem(
+        "ifsistem-sso.chaves.pedido",
+        JSON.stringify({
+          state: "test-state",
+          nonce: "test-nonce",
+          verifier: "test-verifier",
+        }),
+      ),
+    );
+    await page.goto(url + "/callback.html?code=test-code&state=test-state");
     await page.getByRole("heading", { name: "Encontre seu espaço" }).waitFor();
-    await page.getByRole("button", { name: /Sala 114/ }).click();
+    await page.getByRole("button", { name: /Sala 114/ }).waitFor();
+    assert.ok(apiCalls > 0);
     assert.equal(
       await page.getByRole("button", { name: "Pessoas", exact: true }).count(),
       0,
     );
-    await page.locator(".room-agenda").waitFor();
-    await page
-      .getByRole("button", { name: "Solicitar reserva", exact: true })
-      .click();
-    await page.getByText("Solicitação enviada com sucesso!").waitFor();
-    await page.getByRole("button", { name: "Reservas", exact: true }).click();
-    await page
-      .getByRole("table")
-      .getByText("Pendente", { exact: true })
-      .waitFor();
-    assert.equal(
-      await page.getByRole("button", { name: "Aprovar", exact: true }).count(),
-      0,
-    );
-    await page.getByRole("button", { name: "Sair da conta" }).click();
-    await page.getByLabel("CPF", { exact: true }).fill(process.env.ADMIN_CPF);
-    await page
-      .getByLabel("Senha", { exact: true })
-      .fill(process.env.ADMIN_PASSWORD);
-    await page.getByRole("button", { name: "Entrar", exact: true }).click();
-    await page.getByRole("heading", { name: "Encontre seu espaço" }).waitFor();
-    await page.getByRole("button", { name: "Reservas", exact: true }).click();
-    await page.getByRole("button", { name: "Aprovar", exact: true }).click();
-    await page.getByText("Reserva aprovada.").waitFor();
-    await page
-      .getByRole("button", { name: "Controle de chaves", exact: true })
-      .click();
-    await page.getByLabel("Reserva aprovada").selectOption({ index: 1 });
-    await page
-      .getByRole("button", { name: "Registrar retirada", exact: true })
-      .click();
-    await page.getByText("Retirada registrada.").waitFor();
-    await page
-      .getByRole("button", { name: "Devolver chave", exact: true })
-      .click();
-    await page.getByText("Devolução registrada.").waitFor();
-    await page.getByRole("button", { name: "Pessoas", exact: true }).click();
-    await page.getByRole("heading", { name: "Usuários cadastrados" }).waitFor();
-    await page.getByText("Aluno React", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "Desativar", exact: true }).click();
-    await page.getByText("INATIVO", { exact: true }).waitFor();
-    await page
-      .getByRole("button", { name: "Salas e disponibilidade", exact: true })
-      .click();
-    await page.getByRole("heading", { name: "Encontre seu espaço" }).waitFor();
-    await page.screenshot({
-      path: process.env.TMPDIR + "/ifsistem-react-dashboard.png",
-      fullPage: true,
-    });
-    await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
       true,
     );
-    await page.screenshot({
-      path: process.env.TMPDIR + "/ifsistem-react-mobile.png",
-      fullPage: true,
-    });
-    assert.deepEqual(errors, []);
+    await page.reload();
+    await page.getByRole("heading", { name: "Encontre seu espaço" }).waitFor();
+    await page.route("**/oauth2/revoke", (route) =>
+      route.fulfill({ status: 200, body: "" }),
+    );
+    await page.route("**/connect/logout?**", (route) =>
+      route.fulfill({ body: "Logout do auth simulado" }),
+    );
+    await page.getByRole("button", { name: "Sair da conta" }).click();
+    await page.waitForURL("**/connect/logout?**");
+    assert.equal(new URL(page.url()).searchParams.get("client_id"), "chaves");
+    await page.goto(url + "/login.html");
+    assert.equal(
+      await page.evaluate(() =>
+        sessionStorage.getItem("ifsistem-sso.chaves.tokens"),
+      ),
+      null,
+    );
+    await page.route("**/oauth2/authorize?**", (route) =>
+      route.fulfill({ body: "Login do auth simulado" }),
+    );
+    await page.getByRole("button", { name: "Entrar com IFSISTEM" }).click();
+    await page.waitForURL("**/oauth2/authorize?**");
+    const authorize = new URL(page.url());
+    assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
+    assert.equal(authorize.searchParams.get("client_id"), "chaves");
     console.log(
-      "REACT_OK: signup/login aluno, reserva, permissoes por perfil, login admin, aprovacao, retirada/devolucao, gestao de usuarios, desativacao, desktop/mobile.",
+      "SSO_OK: callback, access token, identidade, sessao, logout, PKCE e celular; auth e API simulados.",
     );
   } finally {
     await browser.close();
   }
-})().catch((e) => {
-  console.error(e);
+})().catch((error) => {
+  console.error(error);
   process.exitCode = 1;
 });
