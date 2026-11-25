@@ -15,11 +15,14 @@ export default function Brand() {
       href="#"
       aria-label="IFConect · Início"
     >
-      {logo ? (
-        <img className="brand-logo" src={logo} alt="IFConect" />
-      ) : (
-        <span>IFConect</span>
+      {logo && (
+        <span className="brand-symbol" aria-hidden="true">
+          <img className="brand-logo" src={logo} alt="" />
+        </span>
       )}
+      <span className="brand-wordmark">
+        IF <span>Conect</span>
+      </span>
     </a>
   );
 }

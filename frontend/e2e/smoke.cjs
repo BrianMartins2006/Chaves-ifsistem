@@ -63,6 +63,35 @@ const jwt = (claims) =>
     await page.goto(url + "/callback.html?code=test-code&state=test-state");
     await page.getByRole("heading", { name: "Encontre seu espaço" }).waitFor();
     await page.getByRole("button", { name: /Sala 114/ }).waitFor();
+    await page.route("**/availability?**", (route) => {
+      const date = new URL(route.request().url()).searchParams.get("date");
+      return route.fulfill({
+        json: {
+          roomId: "sala-114",
+          date,
+          zone: "America/Sao_Paulo",
+          occupied: [],
+          classes: [],
+          available: [
+            { startTime: date + "T10:00:00Z", endTime: date + "T23:00:00Z" },
+          ],
+        },
+      });
+    });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.getByRole("button", { name: /Sala 114/ }).click();
+      await page.waitForFunction(
+        () => document.activeElement?.id === "room-agenda",
+      );
+      const position = await page.locator("#room-agenda").boundingBox();
+      assert.ok(
+        position.y >= 0 && position.y < 900,
+        "Agenda deve ficar visível após selecionar sala",
+      );
+    }
+
     assert.ok(apiCalls > 0);
     assert.equal(
       await page.getByRole("button", { name: "Pessoas", exact: true }).count(),
@@ -125,14 +154,26 @@ const jwt = (claims) =>
         },
         { access: jwt({ ...identity, perfil }) },
       );
-      await rolePage.route("**/api/**", (route) => route.fulfill({ json: [] }));
+      await rolePage.route("**/api/**", (route) =>
+        route.fulfill({
+          json: route.request().url().includes("/api/rooms")
+            ? [
+                { id: "sala-114", name: "Sala 114" },
+                { id: "sala-115", name: "Sala 115" },
+                { id: "laboratorio", name: "Laboratório de Informática" },
+              ]
+            : [],
+        }),
+      );
       await rolePage.goto(url + "/");
       await rolePage
         .getByRole("heading", { name: "Encontre seu espaço" })
         .waitFor();
       for (const path of ["/index.html", "/login.html"]) {
         await rolePage.goto(url + path);
-        await rolePage.getByRole("heading", {name:"Encontre seu espaço"}).waitFor();
+        await rolePage
+          .getByRole("heading", { name: "Encontre seu espaço" })
+          .waitFor();
       }
       const link = rolePage.getByRole("button", {
         name: "Usuários",
@@ -223,6 +264,34 @@ const jwt = (claims) =>
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
       );
+      if (perfil === "ADMINISTRADOR") {
+        await rolePage
+          .getByRole("button", { name: "Salas e disponibilidade", exact: true })
+          .click();
+        await rolePage.setViewportSize({ width: 1440, height: 1000 });
+        await rolePage.evaluate(() => window.scrollTo(0, 0));
+        await rolePage.waitForTimeout(150);
+        await rolePage.screenshot({
+          path: "/tmp/ifconect-design-desktop.png",
+          fullPage: true,
+        });
+        for (const width of [320, 390, 768]) {
+          await rolePage.setViewportSize({ width, height: 900 });
+          assert.ok(
+            await rolePage.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+            "Layout sem rolagem horizontal",
+          );
+        }
+        await rolePage.setViewportSize({ width: 390, height: 844 });
+        await rolePage.evaluate(() => window.scrollTo(0, 0));
+        await rolePage.waitForTimeout(150);
+        await rolePage.screenshot({
+          path: "/tmp/ifconect-design-mobile.png",
+          fullPage: true,
+        });
+      }
       await roleContext.close();
     }
     const slowContext = await browser.newContext();

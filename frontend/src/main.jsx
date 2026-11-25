@@ -297,12 +297,23 @@ function App() {
   function selectRoom(id) {
     setSelected(id);
     setAgendaReload((value) => value + 1);
-    if (window.matchMedia("(max-width:700px)").matches)
-      requestAnimationFrame(() =>
-        document
-          .getElementById("room-agenda")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-      );
+    requestAnimationFrame(() => {
+      const agenda = document.getElementById("room-agenda");
+      if (!agenda) return;
+      const mobile = window.matchMedia("(max-width:700px)").matches;
+      const headerHeight = mobile
+        ? document.querySelector(".sidebar")?.getBoundingClientRect().height ||
+          0
+        : 0;
+      agenda.style.scrollMarginTop = `${headerHeight + 24}px`;
+      agenda.focus({ preventScroll: true });
+      agenda.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+        block: "start",
+      });
+    });
   }
   const filteredRooms = rooms.filter((room) =>
     normalizeSearch(room.name).includes(normalizeSearch(roomSearch)),
@@ -323,7 +334,7 @@ function App() {
       <aside className="sidebar">
         <Brand />
         <PortalLink />
-        <p className="nav-caption">MEU CAMPUS</p>
+        <p className="nav-caption">GESTÃO DE ESPAÇOS</p>
         <nav>
           {[
             ["rooms", "Salas e disponibilidade", "▦"],
@@ -349,6 +360,10 @@ function App() {
             </button>
           ))}
         </nav>
+        <div className="sidebar-module">
+          <strong>Salas, reservas e chaves</strong>
+          <p>Organize os espaços e acompanhe suas solicitações.</p>
+        </div>
         <div className="sidebar-bottom">
           <div className="avatar">{user.nome.slice(0, 1)}</div>
           <strong>{user.nome}</strong>
@@ -375,13 +390,27 @@ function App() {
               }
             </span>
           </span>
-          <span className="campus">IFSULDEMINAS</span>
+          <time className="header-date" dateTime={new Date().toISOString()}>
+            {new Intl.DateTimeFormat("pt-BR", {
+              timeZone: zone,
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+              weekday: "long",
+            }).format(new Date())}
+          </time>
         </header>
         <main className="content">
           <div className="heading">
             <div>
               <span className="eyebrow">
-                TUDO PRONTO PARA SEU PRÓXIMO PASSO
+                {new Intl.DateTimeFormat("pt-BR", {
+                  timeZone: zone,
+                  year: "numeric",
+                  month: "long",
+                })
+                  .format(new Date())
+                  .toLocaleUpperCase("pt-BR")}
               </span>
               <h1>
                 {
@@ -507,6 +536,7 @@ function App() {
                 <section
                   className="card"
                   id="room-agenda"
+                  tabIndex={-1}
                   aria-label="Agenda da sala selecionada"
                 >
                   <span className="eyebrow">PLANEJE SEU HORÁRIO</span>

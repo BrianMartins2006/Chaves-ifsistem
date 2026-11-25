@@ -1337,3 +1337,259 @@ label {
 .auth-users .actions {
   flex-wrap: wrap;
 }
+
+/* Portal integrado: mesma hierarquia visual entre os módulos IFConect. */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 232px;
+  padding: 22px 14px;
+  gap: 0;
+}
+.workspace {
+  margin-left: 232px;
+  width: calc(100% - 232px);
+}
+.sidebar .brand,
+.sidebar .brand-with-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 0 0 18px;
+  font-size: 1.35rem;
+  letter-spacing: -0.5px;
+}
+.brand-symbol {
+  display: block;
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: white;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.brand-symbol .brand-logo {
+  position: absolute;
+  width: 81px;
+  height: auto;
+  max-width: none;
+  left: -22px;
+  top: -10px;
+  clip-path: inset(0 0 36% 0);
+  border-radius: 0;
+}
+.brand-wordmark {
+  white-space: nowrap;
+  color: white;
+}
+.brand-wordmark > span {
+  color: var(--brand-bright);
+}
+.sidebar .portal-link {
+  margin: 0 0 32px;
+  min-height: 36px;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.8125rem;
+  color: var(--brand-mint);
+}
+.sidebar .portal-link:hover {
+  background: transparent;
+  color: white;
+}
+.nav-caption {
+  margin: 0 7px 12px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.65px;
+  font-weight: 600;
+}
+.sidebar nav {
+  gap: 5px;
+}
+.sidebar nav :is(button, .users-link) {
+  min-height: 42px;
+  padding: 10px;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 9px;
+}
+.sidebar nav :is(button, .users-link).active {
+  color: #052e16;
+  background: var(--brand-bright);
+  box-shadow: none;
+  font-weight: 600;
+}
+.sidebar nav :is(button, .users-link).active:hover {
+  background: var(--brand-bright);
+  color: #052e16;
+}
+.sidebar-module {
+  margin-top: auto;
+  padding: 14px;
+  background: #ffffff0d;
+  border-radius: 11px;
+  color: white;
+  font-size: 0.8125rem;
+}
+.sidebar-module p {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 5px 0 0;
+  color: var(--brand-mint);
+}
+.sidebar-bottom {
+  margin-top: 16px;
+  padding: 16px 8px 0;
+  gap: 4px;
+}
+.sidebar-bottom .avatar {
+  width: 34px;
+  height: 34px;
+  margin: 0 0 6px;
+}
+.sidebar-bottom strong {
+  font-size: 0.875rem;
+}
+.topbar {
+  padding: 18px 28px;
+  min-height: 64px;
+  border-bottom: 1px solid #dcefe1;
+}
+.topbar > span:first-child {
+  font-family: Montserrat, system-ui, sans-serif;
+  font-weight: 700;
+  color: var(--brand-forest);
+  font-size: 1.125rem;
+}
+.header-date {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  text-align: right;
+}
+.content {
+  max-width: 1240px;
+  padding: 28px;
+}
+.heading {
+  padding: 24px 28px;
+  background: var(--brand-mint);
+  border: 1px solid #bbf7d0;
+  border-radius: 15px;
+  margin-bottom: 20px;
+}
+.heading h1 {
+  font-size: 1.75rem;
+  letter-spacing: -0.6px;
+  margin: 5px 0 7px;
+}
+.heading p {
+  margin: 0;
+  color: #374151;
+}
+.heading .eyebrow {
+  font-size: 0.75rem;
+  color: #4b5563;
+  letter-spacing: 0.5px;
+}
+.card,
+.stats article {
+  border-color: #dcefe1;
+  border-radius: 15px;
+  box-shadow: none;
+}
+.stats {
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.stats article {
+  padding: 22px;
+}
+.stats strong {
+  color: var(--brand-forest);
+}
+.stats article:last-child {
+  background: var(--brand-mint);
+}
+.stats article:nth-child(2) {
+  border-left: 4px solid var(--state-warning);
+}
+thead {
+  background: var(--page-background);
+}
+footer {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+@media (max-width: 700px) {
+  .sidebar {
+    position: sticky;
+    width: 100%;
+    padding: 14px;
+    gap: 12px;
+  }
+  .sidebar .brand,
+  .sidebar .brand-with-logo {
+    width: auto;
+    margin: 0;
+    max-width: calc(100% - 110px);
+    font-size: 1.15rem;
+  }
+  .sidebar .portal-link {
+    margin: 0;
+    min-height: 32px;
+  }
+  .sidebar nav {
+    min-width: 0;
+  }
+  .sidebar nav :is(button, .users-link) {
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+  .sidebar-module {
+    display: none;
+  }
+  .sidebar-bottom {
+    margin: 0;
+    padding: 0;
+    top: 14px;
+    right: 14px;
+  }
+  .workspace {
+    margin-left: 0;
+    width: 100%;
+  }
+  .topbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+  .topbar > span:first-child {
+    font-size: 0.9375rem;
+  }
+  .header-date {
+    text-align: left;
+    font-size: 0.75rem;
+  }
+  .content {
+    padding: 18px 12px;
+  }
+  .heading {
+    padding: 20px;
+    gap: 12px;
+  }
+  .heading h1 {
+    font-size: 1.5rem;
+  }
+  .stats {
+    gap: 12px;
+  }
+  .stats article {
+    padding: 18px;
+  }
+}
